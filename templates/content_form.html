@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="mb-3">
+                <label for="content_type" class="form-label">Тип контента</label>
+                <select class="form-select" id="content_type" name="content_type" required>
+                    <option value="video" {% if content and content.content_type == 'video' %}selected{% endif %}>Видео</option>
+                    <option value="article" {% if content and content.content_type == 'article' %}selected{% endif %}>Статья</option>
+                    <option value="promo" {% if content and content.content_type == 'promo' %}selected{% endif %}>Промокод</option>
+                    <option value="news" {% if content and content.content_type == 'news' %}selected{% endif %}>Новость</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <label for="title" class="form-label">Заголовок</label>
+                <input type="text" class="form-control" id="title" name="title" value="{{ content.title if content else '' }}" required>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Описание</label>
+                <textarea class="form-control" id="description" name="description" rows="3">{{ content.description if content else '' }}</textarea>
+            </div>
+            
+            <div class="mb-3">
+                <label for="link" class="form-label">Ссылка</label>
+                <input type="text" class="form-control" id="link" name="link" value="{{ content.link if content else '' }}">
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('content') }}" class="btn btn-secondary">Отмена</a>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

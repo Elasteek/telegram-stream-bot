@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="mb-3">
+                <label for="title" class="form-label">Название стрима</label>
+                <input type="text" class="form-control" id="title" name="title" value="{{ stream.title if stream else '' }}" required>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Описание</label>
+                <textarea class="form-control" id="description" name="description" rows="3">{{ stream.description if stream else '' }}</textarea>
+            </div>
+            
+            <div class="mb-3">
+                <label for="stream_date" class="form-label">Дата и время стрима</label>
+                <input type="datetime-local" class="form-control" id="stream_date" name="stream_date" value="{{ stream.stream_date if stream else '' }}" required>
+            </div>
+            
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="is_closed" name="is_closed" {% if stream and stream.is_closed %}checked{% endif %}>
+                <label class="form-check-label" for="is_closed">Закрытый стрим</label>
+            </div>
+            
+            <div class="mb-3" id="access_link_block" {% if not stream or not stream.is_closed %}style="display:none;"{% endif %}>
+                <label for="access_link" class="form-label">Ссылка для доступа</label>
+                <input type="text" class="form-control" id="access_link" name="access_link" value="{{ stream.access_link if stream else '' }}">
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('streams') }}" class="btn btn-secondary">Отмена</a>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const isClosedCheckbox = document.getElementById('is_closed');
+        const accessLinkBlock = document.getElementById('access_link_block');
+        
+        isClosedCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                accessLinkBlock.style.display = 'block';
+            } else {
+                accessLinkBlock.style.display = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %}
