@@ -1,119 +1,43 @@
 {% extends "base.html" %}
 
 {% block title %}Дашборд{% endblock %}
-{% block breadcrumb %}Дашборд{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card border-left-primary shadow h-100 py-2">
+<h1>Добро пожаловать в админ-панель!</h1>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
             <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Пользователей</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ user_count }}</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-people fa-2x text-gray-300"></i>
-                    </div>
-                </div>
+                <h5 class="card-title">Управление стримами</h5>
+                <p class="card-text">Добавление и редактирование стримов</p>
+                <a href="/streams" class="btn btn-primary">Перейти</a>
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card border-left-success shadow h-100 py-2">
+    
+    <div class="col-md-4">
+        <div class="card">
             <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Стримов</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stream_count }}</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-camera-video fa-2x text-gray-300"></i>
-                    </div>
-                </div>
+                <h5 class="card-title">Управление контентом</h5>
+                <p class="card-text">Добавление и редактирование контента</p>
+                <a href="/content" class="btn btn-primary">Перейти</a>
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card border-left-info shadow h-100 py-2">
+    
+    <div class="col-md-4">
+        <div class="card">
             <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Контента</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ content_count }}</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-file-earmark-text fa-2x text-gray-300"></i>
-                    </div>
-                </div>
+                <h5 class="card-title">Пользователи</h5>
+                <p class="card-text">Управление пользователями</p>
+                <a href="/users" class="btn btn-primary">Перейти</a>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5>Ближайшие стримы</h5>
-            </div>
-            <div class="card-body">
-                {% if streams %}
-                <div class="table-responsive">
-                    <table class="table table-striped">
-                        <thead>
-                            <tr>
-                                <th>Название</th>
-                                <th>Дата</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for stream in streams %}
-                            <tr>
-                                <td>{{ stream.title }}</td>
-                                <td>{{ stream.stream_date }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <p>Нет предстоящих стримов. <a href="{{ url_for('add_stream') }}">Добавить первый стрим</a></p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5>Быстрые действия</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <a href="{{ url_for('add_stream') }}" class="btn btn-primary d-block">
-                            <i class="bi bi-plus-circle"></i> Добавить стрим
-                        </a>
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <a href="{{ url_for('add_content') }}" class="btn btn-info d-block">
-                            <i class="bi bi-plus-circle"></i> Добавить контент
-                        </a>
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <a href="{{ url_for('users') }}" class="btn btn-secondary d-block">
-                            <i class="bi bi-people"></i> Пользователи
-                        </a>
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <a href="{{ url_for('streams') }}" class="btn btn-success d-block">
-                            <i class="bi bi-camera-video"></i> Все стримы
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="mt-4">
+    <a href="/logout" class="btn btn-danger">Выйти</a>
 </div>
 {% endblock %}
