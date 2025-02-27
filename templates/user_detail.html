@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Информация о пользователе{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Пользователь: {{ user.first_name }} {{ user.last_name }}</h1>
+    <div>
+        <a href="{{ url_for('send_message_to_user', user_id=user.user_id) }}" class="btn btn-primary">
+            <i class="bi bi-envelope"></i> Отправить сообщение
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Профиль пользователя</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>ID:</strong> {{ user.user_id }}</p>
+                <p><strong>Имя:</strong> {{ user.first_name }} {{ user.last_name }}</p>
+                <p><strong>Username:</strong> {{ user.username or 'Не указан' }}</p>
+                <p><strong>Телефон:</strong> {{ user.phone or 'Не указан' }}</p>
+                <p><strong>Дата регистрации:</strong> {{ user.registration_date }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Активные цепочки контента</h5>
+            </div>
+            <div class="card-body">
+                {% if user_sequences %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Название цепочки</th>
+                                <th>Текущий день</th>
+                                <th>Дата начала</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sequence in user_sequences %}
+                            <tr>
+                                <td>{{ sequence.title }}</td>
+                                <td>{{ sequence.current_day }} из {{ sequence.days_count }}</td>
+                                <td>{{ sequence.start_date }}</td>
+                                <td>
+                                    {% if sequence.is_active %}
+                                    <span class="badge bg-success">Активна</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Неактивна</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if sequence.is_active %}
+                                    <form action="{{ url_for('toggle_user_sequence', user_id=user.user_id, sequence_id=sequence.sequence_id) }}" method="POST" style="display: inline;">
+                                        <button type="submit" name="deactivate" class="btn btn-sm btn-warning">
+                                            Приостановить
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <form action="{{ url_for('toggle_user_sequence', user_id=user.user_id, sequence_id=sequence.sequence_id) }}" method="POST" style="display: inline;">
+                                        <button type="submit" name="activate" class="btn btn-sm btn-success">
+                                            Возобновить
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p>Пользователь не подписан ни на одну цепочку контента.</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5>Подписать на цепочку</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_user_sequence', user_id=user.user_id) }}" method="POST">
+                    <div class="mb-3">
+                        <label for="sequence_id" class="form-label">Выберите цепочку</label>
+                        <select class="form-select" id="sequence_id" name="sequence_id" required>
+                            <option value="">-- Выберите цепочку контента --</option>
+                            {% for sequence in available_sequences %}
+                            <option value="{{ sequence.sequence_id }}">
+                                {{ sequence.title }} ({{ sequence.days_count }} дней)
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Подписать пользователя</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Диалог с пользователем</h5>
+                <form id="markAsReadForm" action="{{ url_for('mark_messages_read', user_id=user.user_id) }}" method="POST">
+                    <button type="submit" class="btn btn-sm btn-success">Отметить все как прочитанные</button>
+                </form>
+            </div>
+            <div class="card-body">
+                <div class="chat-container" style="max-height: 500px; overflow-y: auto;">
+                    {% if message_history %}
+                        {% for message in message_history %}
+                            <div class="message-row mb-3 {% if message.direction == 'incoming' %}text-start{% else %}text-end{% endif %}">
+                                <div class="message-bubble p-3 rounded 
+                                    {% if message.direction == 'incoming' %}
+                                        bg-light
+                                        {% if not message.is_read %}border border-danger{% endif %}
+                                    {% else %}
+                                        bg-primary text-white
+                                    {% endif %}
+                                " style="display: inline-block; max-width: 80%;">
+                                    {% if message.direction == 'incoming' and not message.is_read %}
+                                    <span class="badge bg-danger me-2">Новое</span>
+                                    {% endif %}
+                                    
+                                    {% if message.message_type == 'sequence' %}
+                                    <span class="badge bg-info">Цепочка</span>
+                                    {% elif message.message_type == 'stream' %}
+                                    <span class="badge bg-primary">Стрим</span>
+                                    {% elif message.message_type == 'manual' %}
+                                    <span class="badge bg-warning">Вручную</span>
+                                    {% elif message.message_type == 'user' %}
+                                    <span class="badge bg-success">Пользователь</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Другое</span>
+                                    {% endif %}
+                                    
+                                    <div class="message-text">{{ message.text }}</div>
+                                    <div class="message-time text-muted small">
+                                        {{ message.sent_at }}
+                                    </div>
+                                    
+                                    {% if message.direction == 'incoming' %}
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-outline-primary reply-button" 
+                                                data-message-id="{{ message.message_id }}">
+                                            Ответить
+                                        </button>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                    <p class="text-center">История сообщений пуста.</p>
+                    {% endif %}
+                </div>
+                
+                <div class="reply-form mt-3">
+                    <form action="{{ url_for('send_message_to_user', user_id=user.user_id) }}" method="POST">
+                        <input type="hidden" name="reply_to" id="reply_to" value="">
+                        <div class="mb-3">
+                            <textarea class="form-control" name="message_text" rows="3" placeholder="Введите ваше сообщение..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Отправить</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('users') }}" class="btn btn-secondary">Назад к списку пользователей</a>
+</div>
+
+<script>
+    // Прокручиваем историю сообщений к последнему
+    document.addEventListener('DOMContentLoaded', function() {
+        const chatContainer = document.querySelector('.chat-container');
+        if (chatContainer) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // Обработка кнопок "ответить"
+        const replyButtons = document.querySelectorAll('.reply-button');
+        replyButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const messageId = this.getAttribute('data-message-id');
+                document.getElementById('reply_to').value = messageId;
+                
+                // Фокус на поле ввода
+                const textarea = document.querySelector('textarea[name="message_text"]');
+                textarea.focus();
+                
+                // Прокрутка к форме ответа
+                const replyForm = document.querySelector('.reply-form');
+                replyForm.scrollIntoView({ behavior: 'smooth' });
+            });
+        });
+    });
+</script>
+{% endblock %}
