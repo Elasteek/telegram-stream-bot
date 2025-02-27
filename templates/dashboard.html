@@ -3,86 +3,13 @@
 {% block title %}Дашборд{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-12">
-        <h1>Административная панель</h1>
-        <p>Добро пожаловать, {{ session.username }}!</p>
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-4 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="card-title">Стримы</h5>
-                <p class="card-text">Управление стримами, дата и время, настройки доступа</p>
-                <a href="{{ url_for('streams') }}" class="btn btn-primary">Управление стримами</a>
-            </div>
-        </div>
+    <h1>Добро пожаловать в админ-панель!</h1>
+    <p>Вы успешно вошли в систему.</p>
+    
+    <div>
+        <h2>Управление стримами</h2>
+        <p><a href="#" class="btn">Управление стримами</a></p>
     </div>
     
-    <div class="col-md-4 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="card-title">Контент</h5>
-                <p class="card-text">Управление полезным контентом для рассылки пользователям</p>
-                <a href="{{ url_for('content') }}" class="btn btn-primary">Управление контентом</a>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="card-title">Пользователи</h5>
-                <p class="card-text">Просмотр пользователей бота и отправка сообщений</p>
-                <a href="{{ url_for('users') }}" class="btn btn-primary">Пользователи</a>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="card-title">Отправка сообщений</h5>
-                <p class="card-text">Ручная отправка сообщений пользователям бота</p>
-                <a href="{{ url_for('send_message') }}" class="btn btn-primary">Отправить сообщение</a>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="card-title">Статус бота</h5>
-                <p class="card-text">Управление работой Telegram-бота</p>
-                <div id="bot_status">
-                    <div class="d-flex align-items-center justify-content-center mb-2">
-                        <div class="spinner-grow text-success me-2" role="status" style="width: 1rem; height: 1rem;">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <span>Бот запущен и работает</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="mt-4 text-end">
-    <a href="{{ url_for('logout') }}" class="btn btn-danger">Выйти</a>
-</div>
+    <p><a href="/logout" class="btn btn-danger">Выйти</a></p>
 {% endblock %}

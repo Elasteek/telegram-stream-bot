@@ -23,7 +23,7 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        logger.debug(f"Попытка входа: username={username}, password={'*' * len(password)}")
+        logger.debug(f"Попытка входа: username={username}, password={'*' * len(password) if password else 'None'}")
         
         # Простая проверка для тестирования
         if username == 'admin' and password == 'admin123':

@@ -1,31 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Вход{% endblock %}
+{% block title %}Вход в систему{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h4 class="text-center">Вход в административную панель</h4>
-            </div>
-            <div class="card-body">
-                <form method="POST">
-                    {{ form.csrf_token }}
-                    <div class="mb-3">
-                        <label for="username" class="form-label">Имя пользователя</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Пароль</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
-                    </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary">Войти</button>
-                    </div>
-                </form>
-            </div>
+    <h2>Вход в административную панель</h2>
+    
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    
+    <form method="post">
+        <div class="form-group">
+            <label for="username">Имя пользователя</label>
+            <input type="text" id="username" name="username" required>
         </div>
-    </div>
-</div>
+        <div class="form-group">
+            <label for="password">Пароль</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <div class="form-group">
+            <input type="submit" value="Войти">
+        </div>
+    </form>
 {% endblock %}
