@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="title" class="form-label">Название цепочки</label>
+                <input type="text" class="form-control" id="title" name="title" value="{{ sequence.title if sequence else '' }}" required>
+                <div class="form-text">Например: "Курс по диджеингу для начинающих"</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Описание</label>
+                <textarea class="form-control" id="description" name="description" rows="3">{{ sequence.description if sequence else '' }}</textarea>
+                <div class="form-text">Это описание будет показано пользователям при подписке</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="days_count" class="form-label">Длительность (дней)</label>
+                <input type="number" class="form-control" id="days_count" name="days_count" value="{{ sequence.days_count if sequence else '7' }}" min="1" required>
+                <div class="form-text">Общая продолжительность цепочки в днях</div>
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('sequences') }}" class="btn btn-secondary">Отмена</a>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
