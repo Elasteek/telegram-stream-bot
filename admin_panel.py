@@ -3,18 +3,6 @@ import logging
 import sqlite3
 from flask import Flask, render_template, request, session, redirect, url_for, flash
 from datetime import datetime
-cat > admin_panel.py << 'EOF'
-import os
-import logging
-import sqlite3
-from flask import Flask, render_template, request, session, redirect, url_for, flash
-from datetime import datetime
-cat > admin_panel.py << 'EOF'
-import os
-import logging
-import sqlite3
-from flask import Flask, render_template, request, session, redirect, url_for, flash
-from datetime import datetime
 
 # Настройка логирования для отладки
 logging.basicConfig(level=logging.DEBUG)
@@ -66,10 +54,9 @@ def init_db():
 # Инициализируем базу данных при запуске
 init_db()
 
-# Главная страница - перенаправляет на дашборд или логин
+# Главная страница
 @app.route('/')
 def index():
-    logger.debug("Запрос к корневому маршруту /")
     if session.get('logged_in'):
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
@@ -77,36 +64,26 @@ def index():
 # Страница входа
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    logger.debug(f"Запрос к /login, метод: {request.method}")
-    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        logger.debug(f"Попытка входа: username={username}")
         
-        # Простая проверка для тестирования
         if username == 'admin' and password == 'admin123':
             session['logged_in'] = True
             session['username'] = username
             flash('Вы успешно вошли в систему!', 'success')
-            logger.debug("Вход успешен, перенаправление на дашборд")
             return redirect(url_for('dashboard'))
         else:
-            logger.debug("Ошибка входа - неверные учетные данные")
             return render_template('login.html', error="Неверное имя пользователя или пароль")
     
-    logger.debug("Отображение формы входа")
     return render_template('login.html')
 
 # Дашборд
 @app.route('/dashboard')
 def dashboard():
-    logger.debug("Запрос к /dashboard")
     if not session.get('logged_in'):
-        logger.debug("Перенаправление на страницу входа - пользователь не вошел в систему")
         return redirect(url_for('login'))
     
-    # Получаем статистику
     conn = get_db_connection()
     
     # Количество стримов
@@ -119,12 +96,9 @@ def dashboard():
     content_count = cursor.fetchone()[0]
     
     # Ближайшие стримы
-    cursor.execute("""
-    SELECT * FROM streams 
-    WHERE stream_date > datetime('now') 
-    ORDER BY stream_date 
-    LIMIT 5
-    """)
+    cursor.execute('''SELECT * FROM streams 
+                     WHERE stream_date > datetime('now') 
+                     ORDER BY stream_date LIMIT 5''')
     streams = cursor.fetchall()
     
     conn.close()
@@ -216,7 +190,7 @@ def delete_stream(stream_id):
     flash('Стрим успешно удален!', 'success')
     return redirect(url_for('streams'))
 
-# Управление контентом
+# Базовый просмотр контента
 @app.route('/content')
 def content():
     if not session.get('logged_in'):
@@ -228,6 +202,7 @@ def content():
     
     return render_template('content.html', content_items=content_items)
 
+# Добавление контента
 @app.route('/add_content', methods=['GET', 'POST'])
 def add_content():
     if not session.get('logged_in'):
@@ -250,6 +225,7 @@ def add_content():
     
     return render_template('content_form.html', title='Добавление контента')
 
+# Редактирование контента
 @app.route('/edit_content/<int:content_id>', methods=['GET', 'POST'])
 def edit_content(content_id):
     if not session.get('logged_in'):
@@ -280,19 +256,6 @@ def edit_content(content_id):
     
     return render_template('content_form.html', title='Редактирование контента', content=content)
 
-@app.route('/delete_content/<int:content_id>', methods=['POST'])
-def delete_content(content_id):
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    
-    conn = get_db_connection()
-    conn.execute('DELETE FROM content WHERE content_id = ?', (content_id,))
-    conn.commit()
-    conn.close()
-    
-    flash('Контент успешно удален!', 'success')
-    return redirect(url_for('content'))
-
 # Заглушка для раздела пользователей
 @app.route('/users')
 def users():
@@ -304,12 +267,10 @@ def users():
 # Выход из системы
 @app.route('/logout')
 def logout():
-    logger.debug("Выход из системы")
     session.clear()
     flash('Вы вышли из системы!', 'info')
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
-    logger.info(f"Запуск приложения на порту {port}")
     app.run(host='0.0.0.0', port=port)
