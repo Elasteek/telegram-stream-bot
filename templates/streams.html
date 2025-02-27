@@ -1,23 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Стримы{% endblock %}
+{% block title %}Управление стримами{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Управление стримами</h1>
-    <a href="{{ url_for('add_stream') }}" class="btn btn-primary">Добавить стрим</a>
+    <a href="{{ url_for('add_stream') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Добавить стрим
+    </a>
 </div>
-
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        {% for category, message in messages %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        {% endfor %}
-    {% endif %}
-{% endwith %}
 
 <div class="card">
     <div class="card-body">
@@ -37,7 +28,7 @@
                     {% for stream in streams %}
                     <tr>
                         <td>{{ stream.title }}</td>
-                        <td>{{ stream.description|truncate(50) }}</td>
+                        <td>{{ stream.description }}</td>
                         <td>{{ stream.stream_date }}</td>
                         <td>
                             {% if stream.is_closed %}
@@ -50,30 +41,11 @@
                             <a href="{{ url_for('edit_stream', stream_id=stream.stream_id) }}" class="btn btn-sm btn-primary">
                                 Редактировать
                             </a>
-                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ stream.stream_id }}">
-                                Удалить
-                            </button>
-                            
-                            <!-- Модальное окно подтверждения удаления -->
-                            <div class="modal fade" id="deleteModal{{ stream.stream_id }}" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title">Подтверждение удаления</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            Вы уверены, что хотите удалить стрим "{{ stream.title }}"?
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                                            <form action="{{ url_for('delete_stream', stream_id=stream.stream_id) }}" method="POST">
-                                                <button type="submit" class="btn btn-danger">Удалить</button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <form action="{{ url_for('delete_stream', stream_id=stream.stream_id) }}" method="POST" style="display: inline;">
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Вы уверены, что хотите удалить этот стрим?');">
+                                    Удалить
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}
