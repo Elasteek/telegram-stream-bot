@@ -3,6 +3,18 @@ import logging
 import sqlite3
 from flask import Flask, render_template, request, session, redirect, url_for, flash
 from datetime import datetime
+cat > admin_panel.py << 'EOF'
+import os
+import logging
+import sqlite3
+from flask import Flask, render_template, request, session, redirect, url_for, flash
+from datetime import datetime
+cat > admin_panel.py << 'EOF'
+import os
+import logging
+import sqlite3
+from flask import Flask, render_template, request, session, redirect, url_for, flash
+from datetime import datetime
 
 # Настройка логирования для отладки
 logging.basicConfig(level=logging.DEBUG)
@@ -32,6 +44,18 @@ def init_db():
         stream_date TEXT NOT NULL,
         is_closed INTEGER DEFAULT 0,
         access_link TEXT
+    )
+    ''')
+    
+    # Создаем таблицу контента
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS content (
+        content_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        link TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
     
@@ -90,6 +114,10 @@ def dashboard():
     cursor.execute("SELECT COUNT(*) FROM streams")
     stream_count = cursor.fetchone()[0]
     
+    # Количество контента
+    cursor.execute("SELECT COUNT(*) FROM content")
+    content_count = cursor.fetchone()[0]
+    
     # Ближайшие стримы
     cursor.execute("""
     SELECT * FROM streams 
@@ -105,7 +133,7 @@ def dashboard():
         'dashboard.html', 
         user_count=0,
         stream_count=stream_count, 
-        content_count=0,
+        content_count=content_count,
         streams=streams
     )
 
@@ -188,21 +216,84 @@ def delete_stream(stream_id):
     flash('Стрим успешно удален!', 'success')
     return redirect(url_for('streams'))
 
-# Заглушки для других разделов
+# Управление контентом
 @app.route('/content')
 def content():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    flash('Раздел контента скоро будет доступен', 'info')
-    return redirect(url_for('dashboard'))
+    
+    conn = get_db_connection()
+    content_items = conn.execute('SELECT * FROM content ORDER BY created_at DESC').fetchall()
+    conn.close()
+    
+    return render_template('content.html', content_items=content_items)
 
-@app.route('/add_content')
+@app.route('/add_content', methods=['GET', 'POST'])
 def add_content():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    flash('Функция добавления контента скоро будет доступна', 'info')
-    return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        content_type = request.form['content_type']
+        title = request.form['title']
+        description = request.form['description']
+        link = request.form['link']
+        
+        conn = get_db_connection()
+        conn.execute('INSERT INTO content (content_type, title, description, link) VALUES (?, ?, ?, ?)',
+                    (content_type, title, description, link))
+        conn.commit()
+        conn.close()
+        
+        flash('Контент успешно добавлен!', 'success')
+        return redirect(url_for('content'))
+    
+    return render_template('content_form.html', title='Добавление контента')
 
+@app.route('/edit_content/<int:content_id>', methods=['GET', 'POST'])
+def edit_content(content_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    content = conn.execute('SELECT * FROM content WHERE content_id = ?', (content_id,)).fetchone()
+    conn.close()
+    
+    if not content:
+        flash('Контент не найден!', 'danger')
+        return redirect(url_for('content'))
+    
+    if request.method == 'POST':
+        content_type = request.form['content_type']
+        title = request.form['title']
+        description = request.form['description']
+        link = request.form['link']
+        
+        conn = get_db_connection()
+        conn.execute('UPDATE content SET content_type = ?, title = ?, description = ?, link = ? WHERE content_id = ?',
+                    (content_type, title, description, link, content_id))
+        conn.commit()
+        conn.close()
+        
+        flash('Контент успешно обновлен!', 'success')
+        return redirect(url_for('content'))
+    
+    return render_template('content_form.html', title='Редактирование контента', content=content)
+
+@app.route('/delete_content/<int:content_id>', methods=['POST'])
+def delete_content(content_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    conn.execute('DELETE FROM content WHERE content_id = ?', (content_id,))
+    conn.commit()
+    conn.close()
+    
+    flash('Контент успешно удален!', 'success')
+    return redirect(url_for('content'))
+
+# Заглушка для раздела пользователей
 @app.route('/users')
 def users():
     if not session.get('logged_in'):
