@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta
 import sqlite3
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
+from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, Filters, CallbackContext
 from dotenv import load_dotenv
 import asyncio
 import threading
@@ -62,16 +62,16 @@ def get_db_connection():
     return conn
 
 # Функция для отправки сообщения пользователю
-async def send_message_to_user(bot, user_id, text, reply_markup=None):
+def send_message_to_user(bot, user_id, text, reply_markup=None):
     try:
-        await bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
+        bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
         return True
     except Exception as e:
         logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
         return False
 
 # Обработчики команд
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext):
     user = update.effective_user
     user_id = user.id
     
@@ -83,13 +83,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
     
     if existing_user:
-        await update.message.reply_text(
+        update.message.reply_text(
             f"Привет, {user.first_name}! Рады видеть вас снова! "
             f"Вы уже зарегистрированы для получения уведомлений о стримах."
         )
-        await show_main_menu(update, context)
+        show_main_menu(update, context)
     else:
-        await update.message.reply_text(
+        update.message.reply_text(
             f"Привет, {user.first_name}! Добро пожаловать! "
             f"Для завершения регистрации, пожалуйста, поделитесь вашим контактом."
         )
@@ -99,11 +99,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [KeyboardButton("Поделиться контактом", request_contact=True)]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-        await update.message.reply_text("Нажмите кнопку ниже:", reply_markup=reply_markup)
+        update.message.reply_text("Нажмите кнопку ниже:", reply_markup=reply_markup)
         
         return CONTACT
 
-async def process_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def process_contact(update: Update, context: CallbackContext):
     user = update.effective_user
     contact = update.message.contact
     phone = contact.phone_number
@@ -120,21 +120,21 @@ async def process_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
     
     # Отправляем благодарность
-    await update.message.reply_text(
+    update.message.reply_text(
         f"Спасибо за регистрацию, {user.first_name}! "
         f"Теперь вы будете получать уведомления о наших стримах.",
         reply_markup=None  # Убираем клавиатуру запроса контакта
     )
     
     # Показываем главное меню
-    await show_main_menu(update, context)
+    show_main_menu(update, context)
     
     # Планируем уведомления для нового пользователя
-    await schedule_user_notifications(user.id)
+    schedule_user_notifications(user.id)
     
     return ConversationHandler.END
 
-async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def show_main_menu(update: Update, context: CallbackContext):
     keyboard = [
         [InlineKeyboardButton("🎬 Ближайшие стримы", callback_data="upcoming_streams")],
         [InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content")],
@@ -145,34 +145,34 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Проверяем, откуда был вызван метод
     if update.callback_query:
-        await update.callback_query.edit_message_text(
+        update.callback_query.edit_message_text(
             "Главное меню бота для уведомлений о стримах:", reply_markup=reply_markup
         )
     else:
-        await update.message.reply_text(
+        update.message.reply_text(
             "Главное меню бота для уведомлений о стримах:", reply_markup=reply_markup
         )
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def button_handler(update: Update, context: CallbackContext):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
     if query.data == "upcoming_streams":
-        await show_upcoming_streams(update, context)
+        show_upcoming_streams(update, context)
     elif query.data == "useful_content":
-        await show_useful_content(update, context)
+        show_useful_content(update, context)
     elif query.data == "our_courses":
-        await show_courses(update, context)
+        show_courses(update, context)
     elif query.data == "feedback":
-        await request_feedback(update, context)
+        request_feedback(update, context)
     elif query.data == "main_menu":
-        await show_main_menu(update, context)
+        show_main_menu(update, context)
     else:
         # Обработка других кнопок
         pass
 
 # Функции для показа информации
-async def show_upcoming_streams(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def show_upcoming_streams(update: Update, context: CallbackContext):
     query = update.callback_query
     
     conn = get_db_connection()
@@ -186,7 +186,7 @@ async def show_upcoming_streams(update: Update, context: ContextTypes.DEFAULT_TY
     conn.close()
     
     if not upcoming_streams:
-        await query.edit_message_text(
+        query.edit_message_text(
             "В настоящее время нет запланированных стримов. "
             "Мы сообщим вам, когда появятся новые стримы!",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
@@ -212,9 +212,9 @@ async def show_upcoming_streams(update: Update, context: ContextTypes.DEFAULT_TY
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(text=text, reply_markup=reply_markup)
+    query.edit_message_text(text=text, reply_markup=reply_markup)
 
-async def show_useful_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def show_useful_content(update: Update, context: CallbackContext):
     query = update.callback_query
     
     conn = get_db_connection()
@@ -227,7 +227,7 @@ async def show_useful_content(update: Update, context: ContextTypes.DEFAULT_TYPE
     conn.close()
     
     if not content_items:
-        await query.edit_message_text(
+        query.edit_message_text(
             "В настоящее время нет доступных материалов. "
             "Мы добавим новые материалы в ближайшее время!",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
@@ -245,9 +245,9 @@ async def show_useful_content(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(text=text, reply_markup=reply_markup)
+    query.edit_message_text(text=text, reply_markup=reply_markup)
 
-async def show_courses(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def show_courses(update: Update, context: CallbackContext):
     query = update.callback_query
     
     # Для этого раздела можно также создать таблицу в БД, 
@@ -264,9 +264,9 @@ async def show_courses(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(text=text, reply_markup=reply_markup)
+    query.edit_message_text(text=text, reply_markup=reply_markup)
 
-async def request_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def request_feedback(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = query.from_user.id
     
@@ -281,7 +281,7 @@ async def request_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
     
     if not last_stream:
-        await query.edit_message_text(
+        query.edit_message_text(
             "У нас еще не было стримов, по которым можно оставить обратную связь. "
             "После участия в стриме, вы сможете поделиться своим мнением!",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
@@ -296,9 +296,9 @@ async def request_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(text=text, reply_markup=reply_markup)
+    query.edit_message_text(text=text, reply_markup=reply_markup)
 
-async def process_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def process_feedback(update: Update, context: CallbackContext):
  # Отправляем сообщение в админ-панель
     user = update.effective_user
     send_message_to_admin(
@@ -335,24 +335,24 @@ async def process_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
         conn.close()
         
-        await update.message.reply_text(
+        update.message.reply_text(
             "Спасибо за вашу обратную связь! Мы ценим ваше мнение и используем его для улучшения наших стримов."
         )
         
         # Показываем главное меню
-        await show_main_menu(update, context)
+        show_main_menu(update, context)
         
         # Удаляем из контекста ID стрима
         del context.user_data['feedback_stream_id']
     else:
-        await update.message.reply_text(
+        update.message.reply_text(
             "Извините, я не могу обработать эту обратную связь. "
             "Пожалуйста, используйте соответствующую кнопку в меню для отправки обратной связи."
         )
-        await show_main_menu(update, context)
+        show_main_menu(update, context)
 
 # Функции для уведомлений
-async def schedule_user_notifications(user_id):
+def schedule_user_notifications(user_id):
     """Планирует уведомления для пользователя на основе предстоящих стримов"""
     
     conn = get_db_connection()
@@ -486,7 +486,7 @@ async def schedule_user_notifications(user_id):
     conn.commit()
     conn.close()
 
-async def send_pending_notifications(bot):
+def send_pending_notifications(bot):
     """Отправляет все запланированные уведомления, время которых уже наступило"""
     
     logger.info("Проверка и отправка уведомлений...")
@@ -579,7 +579,7 @@ async def send_pending_notifications(bot):
                 continue
         
         # Отправляем уведомление
-        success = await send_message_to_user(bot, user_id, message_text)
+        success = send_message_to_user(bot, user_id, message_text)
         
         # Отмечаем уведомление как отправленное
         if success:
@@ -591,7 +591,7 @@ async def send_pending_notifications(bot):
     conn.commit()
     conn.close()
 
-async def fetch_and_send_admin_messages(bot):
+def fetch_and_send_admin_messages(bot):
     """Получает сообщения от админ-панели и отправляет их пользователям"""
     
     logger.info("Проверка наличия новых сообщений от админ-панели...")
@@ -620,7 +620,7 @@ async def fetch_and_send_admin_messages(bot):
                 continue
             
             # Отправляем сообщение пользователю
-            success = await send_message_to_user(bot, user_id, text)
+            success = send_message_to_user(bot, user_id, text)
             
             if success:
                 # Отмечаем сообщение как отправленное
@@ -637,38 +637,38 @@ async def fetch_and_send_admin_messages(bot):
     except Exception as e:
         logger.error(f"Ошибка при обработке сообщений от админ-панели: {e}")
 
-async def notifications_scheduler(application):
-    """Фоновая задача для регулярной проверки и отправки уведомлений и сообщений от админ-панели"""
+def notifications_scheduler(updater):
+    """Планировщик для регулярной проверки и отправки уведомлений"""
+    bot = updater.bot
+    
     while True:
         try:
-            await send_pending_notifications(application.bot)
+            # Отправка уведомлений
+            send_pending_notifications(bot)
             
-            # Добавляем проверку сообщений от админ-панели
-            await fetch_and_send_admin_messages(application.bot)
-        except Exception as e:
-            logger.error(f"Ошибка в планировщике: {e}")
-        
-        # Проверяем наличие новых стримов для планирования уведомлений
-        try:
+            # Проверка сообщений от админ-панели
+            fetch_and_send_admin_messages(bot)
+            
+            # Проверка наличия новых стримов для планирования уведомлений
             conn = get_db_connection()
             users = conn.execute("SELECT user_id FROM users").fetchall()
             conn.close()
             
             for user in users:
-                await schedule_user_notifications(user['user_id'])
+                schedule_user_notifications(user['user_id'])
+                
         except Exception as e:
-            logger.error(f"Ошибка при планировании уведомлений: {e}")
+            logger.error(f"Ошибка в планировщике: {e}")
         
         # Ждем некоторое время перед следующей проверкой
-        await asyncio.sleep(60)  # Проверка каждую минуту
+        time.sleep(60)  # Проверка каждую минуту
 
-def run_notifications_scheduler(application):
-    """Запускает планировщик уведомлений в основном цикле событий"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(notifications_scheduler(application))
+def run_notifications_scheduler(updater):
+    """Запускает планировщик уведомлений в отдельном потоке"""
+    thread = threading.Thread(target=notifications_scheduler, args=(updater,), daemon=True)
+    thread.start()
 
-async def main():
+def main():
     # Инициализация базы данных
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -732,46 +732,37 @@ async def main():
     conn.close()
     
     # Настраиваем бота
-    from pytz import utc
-    application = Application.builder().token(TOKEN).job_queue(None).build()
+    updater = Updater(token=TOKEN)
+    dispatcher = updater.dispatcher
     
     # Добавляем обработчики команд
     conversation_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            CONTACT: [MessageHandler(filters.CONTACT, process_contact)]
+            CONTACT: [MessageHandler(Filters.contact, process_contact)]
         },
         fallbacks=[CommandHandler('cancel', lambda update, context: ConversationHandler.END)]
     )
     
-    application.add_handler(conversation_handler)
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_feedback))
+    dispatcher.add_handler(conversation_handler)
+    dispatcher.add_handler(CallbackQueryHandler(button_handler))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, process_feedback))
     
     # Запускаем планировщик уведомлений в отдельном потоке
-    notification_thread = threading.Thread(
-        target=run_notifications_scheduler,
-        args=(application,),
-        daemon=True
-    )
-    notification_thread.start()
+    run_notifications_scheduler(updater)
     
     # Запускаем бота
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
+    updater.start_polling()
     
     logger.info("Бот запущен и готов к работе!")
     
     try:
         # Держим бота работающим до Ctrl+C
-        await application.updater.start_polling()
-        await application.idle()
+        updater.idle()
     except KeyboardInterrupt:
         logger.info("Получен сигнал остановки, завершение работы...")
-        await application.stop()
     finally:
-        await application.shutdown()
+        logger.info("Бот остановлен")
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
