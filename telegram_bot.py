@@ -87,6 +87,10 @@ def start(update: Update, context: CallbackContext):
             f"Привет, {user.first_name}! Рады видеть вас снова! "
             f"Вы уже зарегистрированы для получения уведомлений о стримах."
         )
+        # Добавляем приглашение в канал
+        update.message.reply_text(
+            "Присоединяйтесь к нашему закрытому каналу Flatloops School: @flatloops_school"
+        )
         show_main_menu(update, context)
     else:
         update.message.reply_text(
@@ -126,6 +130,11 @@ def process_contact(update: Update, context: CallbackContext):
         reply_markup=None  # Убираем клавиатуру запроса контакта
     )
     
+    # Добавляем приглашение в канал
+    update.message.reply_text(
+        "Присоединяйтесь к нашему закрытому каналу Flatloops School: @flatloops_school"
+    )
+    
     # Показываем главное меню
     show_main_menu(update, context)
     
@@ -146,11 +155,11 @@ def show_main_menu(update: Update, context: CallbackContext):
     # Проверяем, откуда был вызван метод
     if update.callback_query:
         update.callback_query.edit_message_text(
-            "Главное меню бота для уведомлений о стримах:", reply_markup=reply_markup
+            "Главное меню бота", reply_markup=reply_markup
         )
     else:
         update.message.reply_text(
-            "Главное меню бота для уведомлений о стримах:", reply_markup=reply_markup
+            "Главное меню бота", reply_markup=reply_markup
         )
 
 def button_handler(update: Update, context: CallbackContext):
@@ -250,16 +259,13 @@ def show_useful_content(update: Update, context: CallbackContext):
 def show_courses(update: Update, context: CallbackContext):
     query = update.callback_query
     
-    # Для этого раздела можно также создать таблицу в БД, 
-    # но для простоты оставим фиксированный контент
-    
     text = "🎓 Наши курсы:\n\n"
-    text += "1️⃣ Базовый курс - для начинающих\n"
-    text += "👉 https://example.com/basic-course\n\n"
-    text += "2️⃣ Продвинутый курс - для опытных\n"
-    text += "👉 https://example.com/advanced-course\n\n"
-    text += "3️⃣ Мастер-класс - для профессионалов\n"
-    text += "👉 https://example.com/master-class\n\n"
+    text += "1️⃣ Для начинающих - Основы музыкального продюсирования\n"
+    text += "👉 https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya\n\n"
+    text += "2️⃣ Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами\n"
+    text += "👉 https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa\n\n"
+    text += "3️⃣ Продвинутый курс - Техника live выступлений: играй вживую свои треки\n"
+    text += "👉 https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij\n\n"
     
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -289,6 +295,7 @@ def request_feedback(update: Update, context: CallbackContext):
         return
     
     context.user_data['feedback_stream_id'] = last_stream['stream_id']
+    context.user_data['waiting_for_feedback'] = True
     
     text = f"Пожалуйста, оставьте обратную связь по стриму \"{last_stream['title']}\"\n\n"
     text += "Напишите ваш отзыв в ответ на это сообщение."
@@ -298,22 +305,23 @@ def request_feedback(update: Update, context: CallbackContext):
     
     query.edit_message_text(text=text, reply_markup=reply_markup)
 
-def process_feedback(update: Update, context: CallbackContext):
- # Отправляем сообщение в админ-панель
+def process_message(update: Update, context: CallbackContext):
+    """Обрабатывает все текстовые сообщения от пользователя"""
     user = update.effective_user
+    text = update.message.text
+    
+    # Отправляем сообщение в админ-панель в любом случае
     send_message_to_admin(
         user.id,
         user.first_name,
         user.last_name if user.last_name else "",
         user.username if user.username else "",
-        update.message.text
+        text
     )
-
-    user = update.effective_user
-    feedback_text = update.message.text
     
-    if 'feedback_stream_id' in context.user_data:
-        stream_id = context.user_data['feedback_stream_id']
+    # Проверяем, ожидается ли обратная связь от пользователя
+    if context.user_data.get('waiting_for_feedback'):
+        stream_id = context.user_data.get('feedback_stream_id')
         
         # Сохраняем обратную связь в базу данных
         conn = get_db_connection()
@@ -330,7 +338,7 @@ def process_feedback(update: Update, context: CallbackContext):
         
         cursor.execute(
             "INSERT INTO feedback (user_id, stream_id, feedback_text) VALUES (?, ?, ?)",
-            (user.id, stream_id, feedback_text)
+            (user.id, stream_id, text)
         )
         conn.commit()
         conn.close()
@@ -339,15 +347,16 @@ def process_feedback(update: Update, context: CallbackContext):
             "Спасибо за вашу обратную связь! Мы ценим ваше мнение и используем его для улучшения наших стримов."
         )
         
+        # Сбрасываем флаг ожидания обратной связи
+        del context.user_data['waiting_for_feedback']
+        del context.user_data['feedback_stream_id']
+        
         # Показываем главное меню
         show_main_menu(update, context)
-        
-        # Удаляем из контекста ID стрима
-        del context.user_data['feedback_stream_id']
     else:
+        # Это обычное сообщение
         update.message.reply_text(
-            "Извините, я не могу обработать эту обратную связь. "
-            "Пожалуйста, используйте соответствующую кнопку в меню для отправки обратной связи."
+            "Спасибо за ваше сообщение! Наша команда скоро свяжется с вами."
         )
         show_main_menu(update, context)
 
@@ -746,7 +755,9 @@ def main():
     
     dispatcher.add_handler(conversation_handler)
     dispatcher.add_handler(CallbackQueryHandler(button_handler))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, process_feedback))
+    
+    # Обработчик текстовых сообщений (заменяет process_feedback)
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, process_message))
     
     # Запускаем планировщик уведомлений в отдельном потоке
     run_notifications_scheduler(updater)
