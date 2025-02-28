@@ -12,10 +12,10 @@ from dotenv import load_dotenv
 import asyncio
 import threading
 import time
-from pytz import utc
 
 def send_message_to_admin(user_id, first_name, last_name, username, text):
-    admin_panel_url = "https://rough-rora-flatloops-eaeed163.koyeb.app/api/bot/receive_message"
+    admin_panel_url = 
+"https://rough-rora-flatloops-eaeed163.koyeb.app/api/bot/receive_message"
     
     data = {
         "user_id": user_id,
@@ -25,19 +25,11 @@ def send_message_to_admin(user_id, first_name, last_name, username, text):
         "text": text
     }
     
-    logger.info(f"Отправка сообщения в админ-панель URL: {admin_panel_url}")
-    logger.info(f"Данные для отправки: {data}")
-    
     try:
         response = requests.post(admin_panel_url, json=data)
-        logger.info(f"Статус код ответа: {response.status_code}")
-        logger.info(f"Тело ответа: {response.text}")
-        
-        success = response.status_code == 200
-        logger.info(f"Сообщение отправлено в админ-панель: {success}")
-        return success
+        return response.status_code == 200
     except Exception as e:
-        logger.error(f"Ошибка при отправке сообщения в админ-панель: {e}")
+        print(f"Ошибка при отправке сообщения в админ-панель: {e}")
         return False
 
 # Загрузка переменных окружения
@@ -299,16 +291,6 @@ async def request_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text=text, reply_markup=reply_markup)
 
 async def process_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
- # Отправляем сообщение в админ-панель
-    user = update.effective_user
-    send_message_to_admin(
-        user.id,
-        user.first_name,
-        user.last_name if user.last_name else "",
-        user.username if user.username else "",
-        update.message.text
-    )
-
     user = update.effective_user
     feedback_text = update.message.text
     
@@ -683,8 +665,7 @@ async def main():
     conn.close()
     
     # Настраиваем бота
-    from pytz import utc
-    application = Application.builder().token(TOKEN).job_queue(None).build()
+    application = Application.builder().token(TOKEN).build()
     
     # Добавляем обработчики команд
     conversation_handler = ConversationHandler(

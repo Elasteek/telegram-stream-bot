@@ -24,6 +24,14 @@ def init_db():
     logger.debug("Инициализация базы данных")
     conn = get_db_connection()
     cursor = conn.cursor()
+
+# Проверяем, есть ли столбец is_sent в таблице message_history
+    try:
+        cursor.execute("SELECT is_sent FROM message_history LIMIT 1")
+    except sqlite3.OperationalError:
+        # Столбца нет, добавляем его
+        cursor.execute("ALTER TABLE message_history ADD COLUMN is_sent INTEGER DEFAULT 0")
+        logger.info("Добавлен столбец is_sent в таблицу message_history")
     
     # Создаем таблицу стримов
     cursor.execute('''
@@ -1112,6 +1120,47 @@ def logout():
     session.clear()
     flash('Вы вышли из системы!', 'info')
     return redirect(url_for('login'))
+# API для получения сообщений для отправки (для бота)
+@app.route('/api/bot/get_messages')
+def get_messages_for_bot():
+    conn = get_db_connection()
+    
+    # Получаем сообщения, которые нужно отправить (исходящие, не отправленные)
+    messages = conn.execute('''
+        SELECT message_id as id, user_id, text
+        FROM message_history
+        WHERE direction = 'outgoing' AND is_sent = 0
+        LIMIT 10
+    ''').fetchall()
+    
+    conn.close()
+    
+    # Конвертируем в список словарей
+    result = []
+    for message in messages:
+        result.append({
+            'id': message['id'],
+            'user_id': message['user_id'],
+            'text': message['text']
+        })
+    
+    return jsonify(result)
+
+# API для отметки сообщения как отправленного
+@app.route('/api/bot/mark_sent/<int:message_id>', methods=['POST'])
+def mark_message_sent(message_id):
+    conn = get_db_connection()
+    
+    conn.execute('''
+        UPDATE message_history
+        SET is_sent = 1
+        WHERE message_id = ?
+    ''', (message_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
