@@ -591,13 +591,62 @@ async def send_pending_notifications(bot):
     conn.commit()
     conn.close()
 
+async def fetch_and_send_admin_messages(bot):
+    """Получает сообщения от админ-панели и отправляет их пользователям"""
+    
+    logger.info("Проверка наличия новых сообщений от админ-панели...")
+    
+    try:
+        # URL админ-панели для получения сообщений
+        url = "https://rough-rora-flatloops-eaeed163.koyeb.app/api/bot/get_messages"
+        
+        # Запрашиваем сообщения для отправки
+        response = requests.get(url)
+        
+        if response.status_code != 200:
+            logger.error(f"Ошибка при получении сообщений: HTTP {response.status_code}")
+            return
+        
+        messages = response.json()
+        logger.info(f"Получено {len(messages)} сообщений для отправки")
+        
+        for message in messages:
+            message_id = message.get('id')
+            user_id = message.get('user_id')
+            text = message.get('text')
+            
+            if not message_id or not user_id or not text:
+                logger.error(f"Некорректное сообщение: {message}")
+                continue
+            
+            # Отправляем сообщение пользователю
+            success = await send_message_to_user(bot, user_id, text)
+            
+            if success:
+                # Отмечаем сообщение как отправленное
+                mark_url = f"https://rough-rora-flatloops-eaeed163.koyeb.app/api/bot/mark_sent/{message_id}"
+                mark_response = requests.post(mark_url)
+                
+                if mark_response.status_code == 200:
+                    logger.info(f"Сообщение {message_id} отмечено как отправленное")
+                else:
+                    logger.error(f"Ошибка при отметке сообщения {message_id}: HTTP {mark_response.status_code}")
+            else:
+                logger.error(f"Не удалось отправить сообщение {message_id} пользователю {user_id}")
+    
+    except Exception as e:
+        logger.error(f"Ошибка при обработке сообщений от админ-панели: {e}")
+
 async def notifications_scheduler(application):
-    """Фоновая задача для регулярной проверки и отправки уведомлений"""
+    """Фоновая задача для регулярной проверки и отправки уведомлений и сообщений от админ-панели"""
     while True:
         try:
             await send_pending_notifications(application.bot)
+            
+            # Добавляем проверку сообщений от админ-панели
+            await fetch_and_send_admin_messages(application.bot)
         except Exception as e:
-            logger.error(f"Ошибка в планировщике уведомлений: {e}")
+            logger.error(f"Ошибка в планировщике: {e}")
         
         # Проверяем наличие новых стримов для планирования уведомлений
         try:
