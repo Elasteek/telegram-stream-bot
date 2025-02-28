@@ -25,14 +25,6 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-# Проверяем, есть ли столбец is_sent в таблице message_history
-    try:
-        cursor.execute("SELECT is_sent FROM message_history LIMIT 1")
-    except sqlite3.OperationalError:
-        # Столбца нет, добавляем его
-        cursor.execute("ALTER TABLE message_history ADD COLUMN is_sent INTEGER DEFAULT 0")
-        logger.info("Добавлен столбец is_sent в таблицу message_history")
-    
     # Создаем таблицу стримов
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS streams (
@@ -107,6 +99,7 @@ def init_db():
     ''')
     
     # Создаем таблицу истории сообщений с новыми полями
+    # ВАЖНОЕ ИЗМЕНЕНИЕ: добавлен столбец is_sent сразу при создании таблицы
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS message_history (
         message_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,6 +108,7 @@ def init_db():
         text TEXT NOT NULL,
         direction TEXT NOT NULL DEFAULT 'outgoing',
         is_read INTEGER DEFAULT 1,
+        is_sent INTEGER DEFAULT 0,
         reply_to INTEGER,
         sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (user_id)
@@ -140,13 +134,14 @@ def init_db():
         cursor.executemany('INSERT INTO users (user_id, username, first_name, last_name, phone, registration_date) VALUES (?, ?, ?, ?, ?, ?)', test_users)
         
         # Добавим тестовые сообщения от пользователей для демонстрации
+        # ВАЖНОЕ ИЗМЕНЕНИЕ: добавлен параметр is_sent в запрос
         test_messages = [
-            (12345, 'user', 'Здравствуйте! Как мне начать работу с вашим ботом?', 'incoming', 0, None, (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')),
-            (12346, 'user', 'У меня не получается запустить видео из вашей последней рассылки', 'incoming', 1, None, (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')),
-            (12347, 'user', 'Когда будет следующий стрим?', 'incoming', 0, None, (datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%d %H:%M:%S')),
-            (12348, 'user', 'Спасибо за интересный контент!', 'incoming', 1, None, (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')),
+            (12345, 'user', 'Здравствуйте! Как мне начать работу с вашим ботом?', 'incoming', 0, 0, None, (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')),
+            (12346, 'user', 'У меня не получается запустить видео из вашей последней рассылки', 'incoming', 1, 0, None, (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')),
+            (12347, 'user', 'Когда будет следующий стрим?', 'incoming', 0, 0, None, (datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%d %H:%M:%S')),
+            (12348, 'user', 'Спасибо за интересный контент!', 'incoming', 1, 0, None, (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')),
         ]
-        cursor.executemany('INSERT INTO message_history (user_id, message_type, text, direction, is_read, reply_to, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)', test_messages)
+        cursor.executemany('INSERT INTO message_history (user_id, message_type, text, direction, is_read, is_sent, reply_to, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', test_messages)
     
     conn.commit()
     conn.close()
@@ -819,9 +814,9 @@ def send_message():
             
             # Записываем сообщение в историю
             conn.execute('''
-                INSERT INTO message_history (user_id, message_type, text, direction, reply_to)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user_id, 'manual', message_text, 'outgoing', reply_to))
+                INSERT INTO message_history (user_id, message_type, text, direction, reply_to, is_sent)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, 'manual', message_text, 'outgoing', reply_to, 0))
             
             sent_count += 1
         
@@ -883,9 +878,9 @@ def send_message_to_user(user_id):
         
         # Записываем сообщение в историю
         conn.execute('''
-            INSERT INTO message_history (user_id, message_type, text, direction, reply_to)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, 'manual', message_text, 'outgoing', reply_to))
+            INSERT INTO message_history (user_id, message_type, text, direction, reply_to, is_sent)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, 'manual', message_text, 'outgoing', reply_to, 0))
         conn.commit()
         conn.close()
         
@@ -1120,6 +1115,7 @@ def logout():
     session.clear()
     flash('Вы вышли из системы!', 'info')
     return redirect(url_for('login'))
+
 # API для получения сообщений для отправки (для бота)
 @app.route('/api/bot/get_messages')
 def get_messages_for_bot():
