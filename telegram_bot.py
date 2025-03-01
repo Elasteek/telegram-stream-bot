@@ -141,17 +141,12 @@ def process_contact(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 def show_main_menu(update: Update, context: CallbackContext):
-    # Меняем порядок кнопок и обновляем название кнопки для образовательных цепочек
-    # Также изменяем расположение кнопок - теперь по 2 в ряд
+    # Вертикальные кнопки, сохраняя оригинальные названия, кроме "Стримы"
     keyboard = [
-        [
-            InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content"),
-            InlineKeyboardButton("🎓 Бесплатные мини курсы", callback_data="educational_paths")
-        ],
-        [
-            InlineKeyboardButton("💼 Наши курсы", callback_data="our_courses"),
-            InlineKeyboardButton("🎬 Ближайшие стримы", callback_data="upcoming_streams")
-        ],
+        [InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content")],
+        [InlineKeyboardButton("🎓 Бесплатные мини курсы", callback_data="educational_paths")],
+        [InlineKeyboardButton("💼 Наши курсы", callback_data="our_courses")],
+        [InlineKeyboardButton("🎬 Стримы", callback_data="upcoming_streams")],
         [InlineKeyboardButton("✍️ Напиши нам", callback_data="feedback")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -422,34 +417,16 @@ def show_educational_paths(update: Update, context: CallbackContext):
         if not active_paths:  # Если нет ни активных, ни доступных цепочек
             text += "В настоящее время нет доступных образовательных курсов.\n"
     
-    # Добавляем кнопки для выбора цепочки - располагаем по 2 в ряд, если возможно
+    # Добавляем кнопки для просмотра текущих материалов - вертикально
     keyboard = []
-    
-    # Добавляем кнопки для просмотра текущих материалов активных курсов
-    current_buttons = []
     for path in active_paths:
-        current_buttons.append(InlineKeyboardButton(f"📖 Просмотреть: {path['title']}", 
-                                                  callback_data=f"view_current_{path['sequence_id']}"))
+        keyboard.append([InlineKeyboardButton(f"📖 Просмотреть: {path['title']}", 
+                                           callback_data=f"view_current_{path['sequence_id']}")])
     
-    # Группируем кнопки по 2 в ряд
-    for i in range(0, len(current_buttons), 2):
-        if i + 1 < len(current_buttons):
-            keyboard.append([current_buttons[i], current_buttons[i+1]])
-        else:
-            keyboard.append([current_buttons[i]])
-    
-    # Добавляем кнопки для выбора новых курсов
-    new_buttons = []
+    # Добавляем кнопки для выбора новых курсов - вертикально
     for path in paths:
-        new_buttons.append(InlineKeyboardButton(f"▶️ Начать: {path['title']}", 
-                                               callback_data=f"select_path_{path['sequence_id']}"))
-    
-    # Группируем кнопки по 2 в ряд
-    for i in range(0, len(new_buttons), 2):
-        if i + 1 < len(new_buttons):
-            keyboard.append([new_buttons[i], new_buttons[i+1]])
-        else:
-            keyboard.append([new_buttons[i]])
+        keyboard.append([InlineKeyboardButton(f"▶️ Начать: {path['title']}", 
+                                           callback_data=f"select_path_{path['sequence_id']}")])
     
     keyboard.append([InlineKeyboardButton("Назад", callback_data="main_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
