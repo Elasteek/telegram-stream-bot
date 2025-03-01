@@ -41,6 +41,9 @@ def send_message_to_admin(user_id, first_name, last_name, username, text):
 # Загрузка переменных окружения
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+if not TOKEN:
+    print("ОШИБКА: Не найден TELEGRAM_BOT_TOKEN в .env файле")
+    exit(1)
 
 # Настройка логирования
 logging.basicConfig(
@@ -354,38 +357,41 @@ def show_courses(update: Update, context: CallbackContext):
     conn.close()
     
     if not courses:
-        query.edit_message_text(
-            "В настоящее время курсы не доступны. Пожалуйста, проверьте позже.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
-        )
-        return
-    
-    text = "💼 Наши курсы:\n\n"
-    
-    for i, course in enumerate(courses, 1):
-        # Добавляем emoji в зависимости от номера курса
-        if i == 1:
-            emoji = "1️⃣"
-        elif i == 2:
-            emoji = "2️⃣"
-        elif i == 3:
-            emoji = "3️⃣"
-        elif i == 4:
-            emoji = "4️⃣"
-        elif i == 5:
-            emoji = "5️⃣"
-        else:
-            emoji = "🔹"
+        # Если курсов нет в базе или все неактивны, показываем заглушку
+        text = "💼 Наши курсы:\n\n"
+        text += "1️⃣ Для начинающих - Основы музыкального продюсирования\n"
+        text += "👉 https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya\n\n"
+        text += "2️⃣ Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами\n"
+        text += "👉 https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa\n\n"
+        text += "3️⃣ Продвинутый курс - Техника live выступлений: играй вживую свои треки\n"
+        text += "👉 https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij\n\n"
+    else:
+        text = "💼 Наши курсы:\n\n"
         
-        text += f"{emoji} {course['title']}\n"
-        if course['description']:
-            text += f"{course['description']}\n"
-        text += f"👉 {course['link']}\n\n"
+        for i, course in enumerate(courses, 1):
+            # Добавляем emoji в зависимости от номера курса
+            if i == 1:
+                emoji = "1️⃣"
+            elif i == 2:
+                emoji = "2️⃣"
+            elif i == 3:
+                emoji = "3️⃣"
+            elif i == 4:
+                emoji = "4️⃣"
+            elif i == 5:
+                emoji = "5️⃣"
+            else:
+                emoji = "🔹"
+            
+            text += f"{emoji} {course['title']}\n"
+            if course['description']:
+                text += f"{course['description']}\n"
+            text += f"👉 {course['link']}\n\n"
     
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    query.edit_message_text(text=text, reply_markup=reply_markup)
+    query.edit_message_text(text=text, reply_markup=reply_markup, disable_web_page_preview=True)
 
 def request_feedback(update: Update, context: CallbackContext):
     query = update.callback_query

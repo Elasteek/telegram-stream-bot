@@ -7,13 +7,17 @@ import json
 import random
 from werkzeug.utils import secure_filename
 import requests
+from dotenv import load_dotenv
+
+# Загрузка .env файла
+load_dotenv()
 
 # Настройка логирования для отладки
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'debug_key_123'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'debug_key_123')
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Ограничение размера файла (16MB)
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'mp3', 'mp4'}
@@ -132,6 +136,42 @@ def init_db():
     )
     ''')
     
+    # Создаем таблицу для курсов
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS courses (
+        course_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        link TEXT NOT NULL,
+        order_num INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    # Проверяем, есть ли уже курсы в таблице
+    cursor.execute("SELECT COUNT(*) FROM courses")
+    courses_count = cursor.fetchone()[0]
+    
+    # Если курсов нет, добавляем стандартные
+    if courses_count == 0:
+        default_courses = [
+            ("Для начинающих - Основы музыкального продюсирования", 
+             "Базовый курс для всех, кто хочет начать создавать электронную музыку", 
+             "https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya", 1),
+            ("Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами", 
+             "Для тех, кто хочет углубить свои знания и научиться работать с лейблами", 
+             "https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa", 2),
+            ("Продвинутый курс - Техника live выступлений: играй вживую свои треки", 
+             "Научитесь выступать вживую и представлять свою музыку публике", 
+             "https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij", 3)
+        ]
+        
+        cursor.executemany('''
+            INSERT INTO courses (title, description, link, order_num) 
+            VALUES (?, ?, ?, ?)
+        ''', default_courses)
+    
     # Создаем индекс для быстрого поиска контента по статусу скрытия
     cursor.execute('''
     CREATE INDEX IF NOT EXISTS idx_content_is_hidden ON content (is_hidden)
@@ -226,7 +266,10 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        if username == 'admin' and password == 'admin123':
+        admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+        admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
+        
+        if username == admin_username and password == admin_password:
             session['logged_in'] = True
             session['username'] = username
             flash('Вы успешно вошли в систему!', 'success')
@@ -260,6 +303,10 @@ def dashboard():
     cursor.execute("SELECT COUNT(*) FROM content_sequences")
     sequence_count = cursor.fetchone()[0]
     
+    # Количество курсов
+    cursor.execute("SELECT COUNT(*) FROM courses")
+    course_count = cursor.fetchone()[0]
+    
     # Ближайшие стримы
     cursor.execute('''SELECT * FROM streams 
                      WHERE stream_date > datetime('now') 
@@ -274,6 +321,7 @@ def dashboard():
         stream_count=stream_count, 
         content_count=content_count,
         sequence_count=sequence_count,
+        course_count=course_count,
         streams=streams
     )
 
@@ -508,6 +556,89 @@ def delete_content(content_id):
     
     flash('Контент успешно удален!', 'success')
     return redirect(url_for('content'))
+
+# Маршруты для управления курсами
+@app.route('/courses')
+def courses():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    courses = conn.execute('SELECT * FROM courses ORDER BY order_num').fetchall()
+    conn.close()
+    
+    return render_template('courses.html', courses=courses)
+
+@app.route('/add_course', methods=['GET', 'POST'])
+def add_course():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        title = request.form['title']
+        description = request.form['description']
+        link = request.form['link']
+        order_num = request.form['order_num']
+        is_active = 1 if 'is_active' in request.form else 0
+        
+        conn = get_db_connection()
+        conn.execute('''
+            INSERT INTO courses (title, description, link, order_num, is_active) 
+            VALUES (?, ?, ?, ?, ?)
+        ''', (title, description, link, order_num, is_active))
+        conn.commit()
+        conn.close()
+        
+        flash('Курс успешно добавлен!', 'success')
+        return redirect(url_for('courses'))
+    
+    return render_template('course_form.html', title='Добавление курса')
+
+@app.route('/edit_course/<int:course_id>', methods=['GET', 'POST'])
+def edit_course(course_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    course = conn.execute('SELECT * FROM courses WHERE course_id = ?', (course_id,)).fetchone()
+    conn.close()
+    
+    if not course:
+        flash('Курс не найден!', 'danger')
+        return redirect(url_for('courses'))
+    
+    if request.method == 'POST':
+        title = request.form['title']
+        description = request.form['description']
+        link = request.form['link']
+        order_num = request.form['order_num']
+        is_active = 1 if 'is_active' in request.form else 0
+        
+        conn = get_db_connection()
+        conn.execute('''
+            UPDATE courses SET title = ?, description = ?, link = ?, order_num = ?, is_active = ?
+            WHERE course_id = ?
+        ''', (title, description, link, order_num, is_active, course_id))
+        conn.commit()
+        conn.close()
+        
+        flash('Курс успешно обновлен!', 'success')
+        return redirect(url_for('courses'))
+    
+    return render_template('course_form.html', title='Редактирование курса', course=course)
+
+@app.route('/delete_course/<int:course_id>', methods=['POST'])
+def delete_course(course_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    conn.execute('DELETE FROM courses WHERE course_id = ?', (course_id,))
+    conn.commit()
+    conn.close()
+    
+    flash('Курс успешно удален!', 'success')
+    return redirect(url_for('courses'))
 
 # Маршруты для управления цепочками контента
 @app.route('/sequences')
@@ -1207,6 +1338,7 @@ def statistics():
     content_count = conn.execute("SELECT COUNT(*) FROM content").fetchone()[0]
     sequence_count = conn.execute("SELECT COUNT(*) FROM content_sequences").fetchone()[0]
     stream_count = conn.execute("SELECT COUNT(*) FROM streams").fetchone()[0]
+    course_count = conn.execute("SELECT COUNT(*) FROM courses").fetchone()[0]
     
     # Статистика регистраций по дням (за последние 30 дней)
     thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
@@ -1272,6 +1404,7 @@ def statistics():
         content_count=content_count,
         sequence_count=sequence_count,
         stream_count=stream_count,
+        course_count=course_count,
         registration_dates=registration_dates,
         registration_counts=registration_counts,
         sequence_names=sequence_names,

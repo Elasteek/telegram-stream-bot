@@ -1,0 +1,779 @@
+"""
+Telegram бот для управления стримами и автоматизации оповещений
+"""
+import requests
+import os
+import logging
+from datetime import datetime, timedelta
+import sqlite3
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, Filters, CallbackContext
+from dotenv import load_dotenv
+import asyncio
+import threading
+import time
+from pytz import utc
+
+def send_message_to_admin(user_id, first_name, last_name, username, text):
+    admin_panel_url = "https://rough-rora-flatloops-eaeed163.koyeb.app/api/bot/receive_message"
+    
+    data = {
+        "user_id": user_id,
+        "first_name": first_name,
+        "last_name": last_name,
+        "username": username,
+        "text": text
+    }
+    
+    logger.info(f"Отправка сообщения в админ-панель URL: {admin_panel_url}")
+    logger.info(f"Данные для отправки: {data}")
+    
+    try:
+        response = requests.post(admin_panel_url, json=data)
+        logger.info(f"Статус код ответа: {response.status_code}")
+        logger.info(f"Тело ответа: {response.text}")
+        
+        success = response.status_code == 200
+        logger.info(f"Сообщение отправлено в админ-панель: {success}")
+        return success
+    except Exception as e:
+        logger.error(f"Ошибка при отправке сообщения в админ-панель: {e}")
+        return False
+
+# Загрузка переменных окружения
+load_dotenv()
+TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    filename='bot_log.txt'  # Записываем логи в файл для анализа
+)
+logger = logging.getLogger(__name__)
+
+# Состояния для диалога регистрации
+CONTACT = 0
+
+# Подключение к базе данных
+def get_db_connection():
+    conn = sqlite3.connect('stream_bot.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Функция для отправки сообщения пользователю
+def send_message_to_user(bot, user_id, text, reply_markup=None):
+    try:
+        bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
+        return False
+
+# Обработчики команд
+def start(update: Update, context: CallbackContext):
+    user = update.effective_user
+    user_id = user.id
+    
+    # Проверяем, зарегистрирован ли пользователь
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    existing_user = cursor.fetchone()
+    conn.close()
+    
+    if existing_user:
+        update.message.reply_text(
+            f"Привет, {user.first_name}! Рады видеть вас снова! "
+            f"Вы уже зарегистрированы для получения уведомлений о стримах."
+        )
+        # Добавляем приглашение в канал
+        update.message.reply_text(
+            "Присоединяйтесь к нашему закрытому каналу Flatloops School: @flatloops_school"
+        )
+        show_main_menu(update, context)
+    else:
+        update.message.reply_text(
+            f"Привет, {user.first_name}! Добро пожаловать! "
+            f"Для завершения регистрации, пожалуйста, поделитесь вашим контактом."
+        )
+        
+        # Создаем кнопку для отправки контакта
+        keyboard = [
+            [KeyboardButton("Поделиться контактом", request_contact=True)]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+        update.message.reply_text("Нажмите кнопку ниже:", reply_markup=reply_markup)
+        
+        return CONTACT
+
+def process_contact(update: Update, context: CallbackContext):
+    user = update.effective_user
+    contact = update.message.contact
+    phone = contact.phone_number
+    
+    # Сохраняем пользователя в базу данных
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "INSERT OR REPLACE INTO users (user_id, username, first_name, last_name, phone) VALUES (?, ?, ?, ?, ?)",
+        (user.id, user.username, user.first_name, user.last_name, phone)
+    )
+    conn.commit()
+    conn.close()
+    
+    # Отправляем благодарность
+    update.message.reply_text(
+        f"Спасибо за регистрацию, {user.first_name}! "
+        f"Теперь вы будете получать уведомления о наших стримах.",
+        reply_markup=None  # Убираем клавиатуру запроса контакта
+    )
+    
+    # Добавляем приглашение в канал
+    update.message.reply_text(
+        "Присоединяйтесь к нашему закрытому каналу Flatloops School: @flatloops_school"
+    )
+    
+    # Показываем главное меню
+    show_main_menu(update, context)
+    
+    # Планируем уведомления для нового пользователя
+    schedule_user_notifications(user.id)
+    
+    return ConversationHandler.END
+
+def show_main_menu(update: Update, context: CallbackContext):
+    keyboard = [
+        [InlineKeyboardButton("🎬 Ближайшие стримы", callback_data="upcoming_streams")],
+        [InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content")],
+        [InlineKeyboardButton("🎓 Наши курсы", callback_data="our_courses")],
+        [InlineKeyboardButton("💬 Обратная связь", callback_data="feedback")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # Проверяем, откуда был вызван метод
+    if update.callback_query:
+        update.callback_query.edit_message_text(
+            "Главное меню бота", reply_markup=reply_markup
+        )
+    else:
+        update.message.reply_text(
+            "Главное меню бота", reply_markup=reply_markup
+        )
+
+def button_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    
+    if query.data == "upcoming_streams":
+        show_upcoming_streams(update, context)
+    elif query.data == "useful_content":
+        show_useful_content(update, context)
+    elif query.data == "our_courses":
+        show_courses(update, context)
+    elif query.data == "feedback":
+        request_feedback(update, context)
+    elif query.data == "main_menu":
+        show_main_menu(update, context)
+    else:
+        # Обработка других кнопок
+        pass
+
+# Функции для показа информации
+def show_upcoming_streams(update: Update, context: CallbackContext):
+    query = update.callback_query
+    
+    conn = get_db_connection()
+    upcoming_streams = conn.execute("""
+    SELECT stream_id, title, description, stream_date, is_closed
+    FROM streams
+    WHERE stream_date > datetime('now')
+    ORDER BY stream_date
+    LIMIT 5
+    """).fetchall()
+    conn.close()
+    
+    if not upcoming_streams:
+        query.edit_message_text(
+            "В настоящее время нет запланированных стримов. "
+            "Мы сообщим вам, когда появятся новые стримы!",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
+        )
+        return
+    
+    text = "📺 Ближайшие стримы:\n\n"
+    for stream in upcoming_streams:
+        # Форматируем дату из строки
+        try:
+            stream_date = datetime.fromisoformat(stream['stream_date'].replace('Z', '+00:00'))
+            formatted_date = stream_date.strftime('%d.%m.%Y %H:%M')
+        except:
+            formatted_date = stream['stream_date']  # Если не удалось преобразовать, оставляем как есть
+        
+        text += f"🎬 {stream['title']}\n"
+        text += f"📝 {stream['description']}\n"
+        text += f"📅 {formatted_date}\n"
+        if stream['is_closed']:
+            text += "🔒 Закрытый стрим\n"
+        text += "\n"
+    
+    keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    query.edit_message_text(text=text, reply_markup=reply_markup)
+
+def show_useful_content(update: Update, context: CallbackContext):
+    query = update.callback_query
+    
+    conn = get_db_connection()
+    content_items = conn.execute("""
+    SELECT content_id, content_type, title, description, link
+    FROM content
+    ORDER BY created_at DESC
+    LIMIT 5
+    """).fetchall()
+    conn.close()
+    
+    if not content_items:
+        query.edit_message_text(
+            "В настоящее время нет доступных материалов. "
+            "Мы добавим новые материалы в ближайшее время!",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
+        )
+        return
+    
+    text = "📚 Полезные материалы:\n\n"
+    for item in content_items:
+        text += f"📌 {item['title']}\n"
+        text += f"📝 {item['description']}\n"
+        if item['link']:
+            text += f"🔗 {item['link']}\n"
+        text += "\n"
+    
+    keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    query.edit_message_text(text=text, reply_markup=reply_markup)
+
+def show_courses(update: Update, context: CallbackContext):
+    query = update.callback_query
+    
+    text = "🎓 Наши курсы:\n\n"
+    text += "1️⃣ Для начинающих - Основы музыкального продюсирования\n"
+    text += "👉 https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya\n\n"
+    text += "2️⃣ Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами\n"
+    text += "👉 https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa\n\n"
+    text += "3️⃣ Продвинутый курс - Техника live выступлений: играй вживую свои треки\n"
+    text += "👉 https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij\n\n"
+    
+    keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    query.edit_message_text(text=text, reply_markup=reply_markup)
+
+def request_feedback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    # Получаем последний стрим, на котором был пользователь
+    conn = get_db_connection()
+    last_stream = conn.execute("""
+    SELECT stream_id, title FROM streams 
+    WHERE stream_date < datetime('now') 
+    ORDER BY stream_date DESC 
+    LIMIT 1
+    """).fetchone()
+    conn.close()
+    
+    if not last_stream:
+        query.edit_message_text(
+            "У нас еще не было стримов, по которым можно оставить обратную связь. "
+            "После участия в стриме, вы сможете поделиться своим мнением!",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
+        )
+        return
+    
+    context.user_data['feedback_stream_id'] = last_stream['stream_id']
+    context.user_data['waiting_for_feedback'] = True
+    
+    text = f"Пожалуйста, оставьте обратную связь по стриму \"{last_stream['title']}\"\n\n"
+    text += "Напишите ваш отзыв в ответ на это сообщение."
+    
+    keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    query.edit_message_text(text=text, reply_markup=reply_markup)
+
+def process_message(update: Update, context: CallbackContext):
+    """Обрабатывает все текстовые сообщения от пользователя"""
+    user = update.effective_user
+    text = update.message.text
+    
+    # Отправляем сообщение в админ-панель в любом случае
+    send_message_to_admin(
+        user.id,
+        user.first_name,
+        user.last_name if user.last_name else "",
+        user.username if user.username else "",
+        text
+    )
+    
+    # Проверяем, ожидается ли обратная связь от пользователя
+    if context.user_data.get('waiting_for_feedback'):
+        stream_id = context.user_data.get('feedback_stream_id')
+        
+        # Сохраняем обратную связь в базу данных
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS feedback (
+            feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            stream_id INTEGER,
+            feedback_text TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
+        cursor.execute(
+            "INSERT INTO feedback (user_id, stream_id, feedback_text) VALUES (?, ?, ?)",
+            (user.id, stream_id, text)
+        )
+        conn.commit()
+        conn.close()
+        
+        update.message.reply_text(
+            "Спасибо за вашу обратную связь! Мы ценим ваше мнение и используем его для улучшения наших стримов."
+        )
+        
+        # Сбрасываем флаг ожидания обратной связи
+        del context.user_data['waiting_for_feedback']
+        del context.user_data['feedback_stream_id']
+        
+        # Показываем главное меню
+        show_main_menu(update, context)
+    else:
+        # Это обычное сообщение
+        update.message.reply_text(
+            "Спасибо за ваше сообщение! Наша команда скоро свяжется с вами."
+        )
+        show_main_menu(update, context)
+
+# Функции для уведомлений
+def schedule_user_notifications(user_id):
+    """Планирует уведомления для пользователя на основе предстоящих стримов"""
+    
+    conn = get_db_connection()
+    
+    # Создаем таблицу уведомлений, если она не существует
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS notifications (
+        notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        stream_id INTEGER,
+        notification_type TEXT,
+        sent INTEGER DEFAULT 0,
+        scheduled_time TEXT
+    )
+    """)
+    
+    # Получаем все предстоящие стримы
+    upcoming_streams = conn.execute("""
+    SELECT stream_id, title, stream_date, is_closed, access_link
+    FROM streams
+    WHERE stream_date > datetime('now')
+    ORDER BY stream_date
+    """).fetchall()
+    
+    # Удаляем старые запланированные уведомления для этого пользователя
+    conn.execute("DELETE FROM notifications WHERE user_id = ? AND sent = 0", (user_id,))
+    
+    for stream in upcoming_streams:
+        stream_id = stream['stream_id']
+        stream_date_str = stream['stream_date']
+        
+        # Преобразуем строку в datetime
+        try:
+            stream_date = datetime.fromisoformat(stream_date_str.replace('Z', '+00:00'))
+        except:
+            # Если не в ISO формате, пробуем другие форматы
+            try:
+                stream_date = datetime.strptime(stream_date_str, '%Y-%m-%d %H:%M:%S')
+            except:
+                logger.error(f"Не удалось распарсить дату для стрима {stream_id}: {stream_date_str}")
+                continue
+        
+        now = datetime.now()
+        
+        # Проверяем, что стрим в будущем
+        if stream_date <= now:
+            continue
+        
+        # Расчет дней до стрима
+        days_until_stream = (stream_date - now).days
+        
+        # Планируем уведомления за день, за два и т.д. до стрима
+        for day in range(min(days_until_stream, 7), 0, -2):  # Каждые 2 дня, но не больше недели
+            notification_date = stream_date - timedelta(days=day)
+            
+            # Добавляем уведомление в базу
+            conn.execute(
+                """
+                INSERT INTO notifications 
+                (user_id, stream_id, notification_type, scheduled_time) 
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, stream_id, 'reminder', notification_date.strftime('%Y-%m-%d %H:%M:%S'))
+            )
+        
+        # Напоминание в день стрима (утром)
+        morning_time = stream_date.replace(hour=9, minute=0, second=0)
+        if morning_time > now:
+            conn.execute(
+                """
+                INSERT INTO notifications 
+                (user_id, stream_id, notification_type, scheduled_time) 
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, stream_id, 'day_of_stream', morning_time.strftime('%Y-%m-%d %H:%M:%S'))
+            )
+        
+        # Напоминание за час до стрима
+        hour_before = stream_date - timedelta(hours=1)
+        if hour_before > now:
+            conn.execute(
+                """
+                INSERT INTO notifications 
+                (user_id, stream_id, notification_type, scheduled_time) 
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, stream_id, 'hour_before', hour_before.strftime('%Y-%m-%d %H:%M:%S'))
+            )
+        
+        # Уведомление во время стрима
+        conn.execute(
+            """
+            INSERT INTO notifications 
+            (user_id, stream_id, notification_type, scheduled_time) 
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, stream_id, 'during_stream', stream_date.strftime('%Y-%m-%d %H:%M:%S'))
+        )
+        
+        # Уведомление после стрима
+        after_stream = stream_date + timedelta(hours=2)
+        conn.execute(
+            """
+            INSERT INTO notifications 
+            (user_id, stream_id, notification_type, scheduled_time) 
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, stream_id, 'after_stream', after_stream.strftime('%Y-%m-%d %H:%M:%S'))
+        )
+    
+    # Планируем бонусные уведомления (контент)
+    content_count = conn.execute("SELECT COUNT(*) FROM content").fetchone()[0]
+    
+    if content_count > 0:
+        # Определяем, сколько бонусных уведомлений планировать
+        bonus_count = min(content_count, 10)  # Не более 10 бонусных уведомлений
+        
+        for i in range(bonus_count):
+            # Уведомление каждые 2-3 дня
+            bonus_date = now + timedelta(days=i*2 + 1)
+            
+            conn.execute(
+                """
+                INSERT INTO notifications 
+                (user_id, stream_id, notification_type, scheduled_time) 
+                VALUES (?, NULL, ?, ?)
+                """,
+                (user_id, 'bonus', bonus_date.strftime('%Y-%m-%d %H:%M:%S'))
+            )
+    
+    conn.commit()
+    conn.close()
+
+def send_pending_notifications(bot):
+    """Отправляет все запланированные уведомления, время которых уже наступило"""
+    
+    logger.info("Проверка и отправка уведомлений...")
+    
+    conn = get_db_connection()
+    
+    # Получаем все запланированные уведомления, которые нужно отправить
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    notifications = conn.execute("""
+    SELECT n.notification_id, n.user_id, n.stream_id, n.notification_type,
+           s.title, s.description, s.stream_date, s.is_closed, s.access_link
+    FROM notifications n
+    LEFT JOIN streams s ON n.stream_id = s.stream_id
+    WHERE n.sent = 0 AND n.scheduled_time <= ?
+    """, (now,)).fetchall()
+    
+    logger.info(f"Найдено {len(notifications)} уведомлений для отправки")
+    
+    for notification in notifications:
+        notification_id = notification['notification_id']
+        user_id = notification['user_id']
+        stream_id = notification['stream_id']
+        notification_type = notification['notification_type']
+        
+        # Готовим текст сообщения в зависимости от типа уведомления
+        message_text = ""
+        
+        if notification_type == 'reminder':
+            message_text = f"🔔 Напоминание о предстоящем стриме!\n\n"
+            if stream_id:
+                message_text += f"📺 {notification['title']}\n"
+                message_text += f"📝 {notification['description']}\n"
+                
+                # Форматируем дату
+                try:
+                    stream_date = datetime.fromisoformat(notification['stream_date'].replace('Z', '+00:00'))
+                    days_until = (stream_date - datetime.now()).days
+                    message_text += f"⏳ До стрима осталось: {days_until} дней\n"
+                    message_text += f"📅 Дата: {stream_date.strftime('%d.%m.%Y %H:%M')}\n"
+                except:
+                    message_text += f"📅 Дата: {notification['stream_date']}\n"
+        
+        elif notification_type == 'day_of_stream':
+            message_text = f"🎬 Сегодня состоится стрим!\n\n"
+            message_text += f"📺 {notification['title']}\n"
+            message_text += f"📝 {notification['description']}\n"
+            
+            # Форматируем время
+            try:
+                stream_date = datetime.fromisoformat(notification['stream_date'].replace('Z', '+00:00'))
+                message_text += f"🕒 Начало в: {stream_date.strftime('%H:%M')}\n"
+            except:
+                pass
+        
+        elif notification_type == 'hour_before':
+            message_text = f"⏰ Стрим начнется через час!\n\n"
+            message_text += f"📺 {notification['title']}\n"
+            message_text += f"📝 {notification['description']}\n"
+            message_text += f"🔗 Подготовьтесь к просмотру!\n"
+        
+        elif notification_type == 'during_stream':
+            message_text = f"🔴 Мы в эфире!\n\n"
+            message_text += f"📺 {notification['title']}\n"
+            if notification['is_closed'] and notification['access_link']:
+                message_text += f"🔐 Это закрытый стрим. Ваша ссылка для доступа: {notification['access_link']}\n"
+        
+        elif notification_type == 'after_stream':
+            message_text = f"🎬 Спасибо, что были с нами на стриме!\n\n"
+            message_text += f"📺 {notification['title']}\n"
+            message_text += f"💬 Пожалуйста, оставьте обратную связь, чтобы мы могли улучшить наши стримы.\n"
+        
+        elif notification_type == 'bonus':
+            # Получаем случайный контент
+            content = conn.execute("""
+            SELECT title, description, link
+            FROM content
+            ORDER BY RANDOM()
+            LIMIT 1
+            """).fetchone()
+            
+            if content:
+                message_text = f"🎁 Полезный материал для вас!\n\n"
+                message_text += f"📌 {content['title']}\n"
+                message_text += f"📝 {content['description']}\n"
+                if content['link']:
+                    message_text += f"🔗 {content['link']}\n"
+            else:
+                # Если контента нет, не отправляем уведомление
+                conn.execute("UPDATE notifications SET sent = 1 WHERE notification_id = ?", (notification_id,))
+                continue
+        
+        # Отправляем уведомление
+        success = send_message_to_user(bot, user_id, message_text)
+        
+        # Отмечаем уведомление как отправленное
+        if success:
+            conn.execute("UPDATE notifications SET sent = 1 WHERE notification_id = ?", (notification_id,))
+            logger.info(f"Уведомление {notification_id} отправлено пользователю {user_id}")
+        else:
+            logger.error(f"Не удалось отправить уведомление {notification_id} пользователю {user_id}")
+    
+    conn.commit()
+    conn.close()
+
+def fetch_and_send_admin_messages(bot):
+    """Получает сообщения от админ-панели и отправляет их пользователям"""
+    
+    logger.info("Проверка наличия новых сообщений от админ-панели...")
+    
+    try:
+        # URL админ-панели для получения сообщений
+        url = "https://rough-rora-flatloops-eaeed163.koyeb.app/api/bot/get_messages"
+        
+        # Запрашиваем сообщения для отправки
+        response = requests.get(url)
+        
+        if response.status_code != 200:
+            logger.error(f"Ошибка при получении сообщений: HTTP {response.status_code}")
+            return
+        
+        messages = response.json()
+        logger.info(f"Получено {len(messages)} сообщений для отправки")
+        
+        for message in messages:
+            message_id = message.get('id')
+            user_id = message.get('user_id')
+            text = message.get('text')
+            
+            if not message_id or not user_id or not text:
+                logger.error(f"Некорректное сообщение: {message}")
+                continue
+            
+            # Отправляем сообщение пользователю
+            success = send_message_to_user(bot, user_id, text)
+            
+            if success:
+                # Отмечаем сообщение как отправленное
+                mark_url = f"https://rough-rora-flatloops-eaeed163.koyeb.app/api/bot/mark_sent/{message_id}"
+                mark_response = requests.post(mark_url)
+                
+                if mark_response.status_code == 200:
+                    logger.info(f"Сообщение {message_id} отмечено как отправленное")
+                else:
+                    logger.error(f"Ошибка при отметке сообщения {message_id}: HTTP {mark_response.status_code}")
+            else:
+                logger.error(f"Не удалось отправить сообщение {message_id} пользователю {user_id}")
+    
+    except Exception as e:
+        logger.error(f"Ошибка при обработке сообщений от админ-панели: {e}")
+
+def notifications_scheduler(updater):
+    """Планировщик для регулярной проверки и отправки уведомлений"""
+    bot = updater.bot
+    
+    while True:
+        try:
+            # Отправка уведомлений
+            send_pending_notifications(bot)
+            
+            # Проверка сообщений от админ-панели
+            fetch_and_send_admin_messages(bot)
+            
+            # Проверка наличия новых стримов для планирования уведомлений
+            conn = get_db_connection()
+            users = conn.execute("SELECT user_id FROM users").fetchall()
+            conn.close()
+            
+            for user in users:
+                schedule_user_notifications(user['user_id'])
+                
+        except Exception as e:
+            logger.error(f"Ошибка в планировщике: {e}")
+        
+        # Ждем некоторое время перед следующей проверкой
+        time.sleep(60)  # Проверка каждую минуту
+
+def run_notifications_scheduler(updater):
+    """Запускает планировщик уведомлений в отдельном потоке"""
+    thread = threading.Thread(target=notifications_scheduler, args=(updater,), daemon=True)
+    thread.start()
+
+def main():
+    # Инициализация базы данных
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Создаем необходимые таблицы, если они не существуют
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        first_name TEXT,
+        last_name TEXT,
+        phone TEXT,
+        registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS streams (
+        stream_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        stream_date TEXT NOT NULL,
+        is_closed INTEGER DEFAULT 0,
+        access_link TEXT
+    )
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS content (
+        content_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        link TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS notifications (
+        notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        stream_id INTEGER,
+        notification_type TEXT,
+        sent INTEGER DEFAULT 0,
+        scheduled_time TEXT
+    )
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS feedback (
+        feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        stream_id INTEGER,
+        feedback_text TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    conn.commit()
+    conn.close()
+    
+    # Настраиваем бота
+    updater = Updater(token=TOKEN)
+    dispatcher = updater.dispatcher
+    
+    # Добавляем обработчики команд
+    conversation_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            CONTACT: [MessageHandler(Filters.contact, process_contact)]
+        },
+        fallbacks=[CommandHandler('cancel', lambda update, context: ConversationHandler.END)]
+    )
+    
+    dispatcher.add_handler(conversation_handler)
+    dispatcher.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Обработчик текстовых сообщений (заменяет process_feedback)
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, process_message))
+    
+    # Запускаем планировщик уведомлений в отдельном потоке
+    run_notifications_scheduler(updater)
+    
+    # Запускаем бота
+    updater.start_polling()
+    
+    logger.info("Бот запущен и готов к работе!")
+    
+    try:
+        # Держим бота работающим до Ctrl+C
+        updater.idle()
+    except KeyboardInterrupt:
+        logger.info("Получен сигнал остановки, завершение работы...")
+    finally:
+        logger.info("Бот остановлен")
+
+if __name__ == '__main__':
+    main()
