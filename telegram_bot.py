@@ -85,10 +85,14 @@ def start(update: Update, context: CallbackContext):
             f"Привет, {user.first_name}! Рады видеть вас снова!",
             reply_markup=ReplyKeyboardRemove()
         )
-        # Добавляем приглашение в канал
-        update.message.reply_text(
-            "Присоединяйтесь к нашему закрытому каналу Flatloops School: @flatloops_school"
+        # Вместо мгновенной отправки планируем отправку приглашения через 2 минуты
+        context.job_queue.run_once(
+            send_welcome_invite, 
+            120, 
+            context={'user_id': user_id}
         )
+        logger.info(f"Запланирована отправка приглашения в канал через 2 минуты для пользователя {user_id}")
+        
         show_main_menu(update, context)
     else:
         update.message.reply_text(
@@ -110,11 +114,14 @@ def send_welcome_invite(context: CallbackContext):
     job = context.job
     user_id = job.context['user_id']
     
+    logger.info(f"Отправка отложенного приглашения в канал для пользователя {user_id}")
+    
     try:
         context.bot.send_message(
             chat_id=user_id,
             text="Присоединяйтесь к нашему закрытому каналу Flatloops School: @flatloops_school"
         )
+        logger.info(f"Отложенное приглашение успешно отправлено пользователю {user_id}")
     except Exception as e:
         logger.error(f"Ошибка при отправке отложенного приглашения: {e}")
 
