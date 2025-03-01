@@ -120,6 +120,7 @@ def send_welcome_invite(context: CallbackContext):
     logger.info(f"Отправка отложенного приветственного сообщения пользователю {user_id}")
     
     try:
+        # Отправляем приветственное сообщение
         context.bot.send_message(
             chat_id=user_id,
             text="Flatloops School: Твой путь в электронной музыке 🎧🚀\n\n"
@@ -134,7 +135,25 @@ def send_welcome_invite(context: CallbackContext):
                 "Твой уровень не важен — важно желание творить и развиваться.\n"
                 "👉 Присоединяйся: https://t.me/+r4YENOpRDldjNmEy 🎚️🎶"
         )
-        logger.info(f"Отложенное приветственное сообщение успешно отправлено пользователю {user_id}")
+        
+        # Создаем клавиатуру
+        keyboard = [
+            ["📚 Полезные материалы"],
+            ["🎓 Бесплатные мини курсы"],
+            ["💼 Наши курсы"],
+            ["🎬 Стримы"],
+            ["✍️ Напиши нам"]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        # Показываем меню после приветственного сообщения
+        context.bot.send_message(
+            chat_id=user_id,
+            text="Выберите раздел:",
+            reply_markup=reply_markup
+        )
+        
+        logger.info(f"Отложенное приветственное сообщение и меню успешно отправлены пользователю {user_id}")
     except Exception as e:
         logger.error(f"Ошибка при отправке отложенного приветственного сообщения: {e}")
 
@@ -177,100 +196,50 @@ def process_contact(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 def show_main_menu(update: Update, context: CallbackContext):
-    # Вертикальные кнопки, сохраняя оригинальные названия, кроме "Стримы"
+    """Показывает главное меню как постоянную клавиатуру внизу экрана"""
+    # Создаем постоянную клавиатуру
     keyboard = [
-        [InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content")],
-        [InlineKeyboardButton("🎓 Бесплатные мини курсы", callback_data="educational_paths")],
-        [InlineKeyboardButton("💼 Наши курсы", callback_data="our_courses")],
-        [InlineKeyboardButton("🎬 Стримы", callback_data="upcoming_streams")],
-        [InlineKeyboardButton("✍️ Напиши нам", callback_data="feedback")]
+        ["📚 Полезные материалы"],
+        ["🎓 Бесплатные мини курсы"],
+        ["💼 Наши курсы"],
+        ["🎬 Стримы"],
+        ["✍️ Напиши нам"]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
-    # Проверяем, откуда был вызван метод
+    # Отправляем сообщение с меню
     if update.callback_query:
-        update.callback_query.edit_message_text(
-            "Выберите раздел:", reply_markup=reply_markup
+        # Если вызов через CallbackQuery, сначала отвечаем на callback
+        update.callback_query.answer()
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Выберите раздел:",
+            reply_markup=reply_markup
         )
     else:
         update.message.reply_text(
-            "Выберите раздел:", reply_markup=reply_markup
+            "Выберите раздел:",
+            reply_markup=reply_markup
         )
 
 def button_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
     
-    if query.data == "upcoming_streams":
-        show_upcoming_streams(update, context)
-    elif query.data == "useful_content":
-        show_useful_content(update, context)
-    elif query.data == "educational_paths": 
-        show_educational_paths(update, context)
-    elif query.data == "our_courses":
-        show_courses(update, context)
-    elif query.data == "feedback":
-        request_feedback(update, context)
-    elif query.data == "main_menu":
-        show_main_menu(update, context)
+    if query.data.startswith("view_current_"):
+        # Обработка запроса на просмотр текущего материала курса
+        path_id = int(query.data.split("_")[2])
+        show_current_material(update, context, path_id)
     elif query.data.startswith("select_path_"):
         # Обработка выбора образовательной цепочки
         path_id = int(query.data.split("_")[2])
         subscribe_to_path(update, context, path_id)
-    elif query.data.startswith("view_current_"):
-        # Обработка запроса на просмотр текущего материала курса
-        path_id = int(query.data.split("_")[2])
-        show_current_material(update, context, path_id)
     else:
         # Обработка других кнопок
         pass
 
-# Функции для показа информации
-def show_upcoming_streams(update: Update, context: CallbackContext):
-    query = update.callback_query
-    
-    conn = get_db_connection()
-    upcoming_streams = conn.execute("""
-    SELECT stream_id, title, description, stream_date, is_closed
-    FROM streams
-    WHERE stream_date > datetime('now')
-    ORDER BY stream_date
-    LIMIT 5
-    """).fetchall()
-    conn.close()
-    
-    if not upcoming_streams:
-        query.edit_message_text(
-            "В настоящее время нет запланированных стримов. "
-            "Мы сообщим вам, когда появятся новые стримы!",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
-        )
-        return
-    
-    text = "📺 Ближайшие стримы:\n\n"
-    for stream in upcoming_streams:
-        # Форматируем дату из строки
-        try:
-            stream_date = datetime.fromisoformat(stream['stream_date'].replace('Z', '+00:00'))
-            formatted_date = stream_date.strftime('%d.%m.%Y %H:%M')
-        except:
-            formatted_date = stream['stream_date']  # Если не удалось преобразовать, оставляем как есть
-        
-        text += f"🎬 {stream['title']}\n"
-        text += f"📝 {stream['description']}\n"
-        text += f"📅 {formatted_date}\n"
-        if stream['is_closed']:
-            text += "🔒 Закрытый стрим\n"
-        text += "\n"
-    
-    keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    query.edit_message_text(text=text, reply_markup=reply_markup)
-
-def show_useful_content(update: Update, context: CallbackContext):
-    query = update.callback_query
-    
+# Функции для обработки кнопок главного меню
+def handle_useful_content(update: Update, context: CallbackContext):
     conn = get_db_connection()
     # Показываем только нескрытый контент
     content_items = conn.execute("""
@@ -283,10 +252,9 @@ def show_useful_content(update: Update, context: CallbackContext):
     conn.close()
     
     if not content_items:
-        query.edit_message_text(
+        update.message.reply_text(
             "В настоящее время нет доступных материалов. "
-            "Мы добавим новые материалы в ближайшее время!",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
+            "Мы добавим новые материалы в ближайшее время!"
         )
         return
     
@@ -300,186 +268,10 @@ def show_useful_content(update: Update, context: CallbackContext):
             text += "📎 Доступны дополнительные материалы\n"
         text += "\n"
     
-    keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    query.edit_message_text(text=text, reply_markup=reply_markup)
+    update.message.reply_text(text=text)
 
-def show_courses(update: Update, context: CallbackContext):
-    query = update.callback_query
-    
-    conn = get_db_connection()
-    # Проверяем, существует ли таблица courses
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='courses'")
-    table_exists = cursor.fetchone() is not None
-    
-    if not table_exists:
-        # Создаем таблицу курсов, если она еще не существует
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS courses (
-            course_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            description TEXT,
-            link TEXT NOT NULL,
-            order_num INTEGER DEFAULT 0,
-            is_active INTEGER DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-        conn.commit()
-        
-        # Добавляем начальные курсы в базу данных
-        default_courses = [
-            ("Для начинающих - Основы музыкального продюсирования", 
-             "Базовый курс для всех, кто хочет начать создавать электронную музыку", 
-             "https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya", 1),
-            ("Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами", 
-             "Для тех, кто хочет углубить свои знания и научиться работать с лейблами", 
-             "https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa", 2),
-            ("Продвинутый курс - Техника live выступлений: играй вживую свои треки", 
-             "Научитесь выступать вживую и представлять свою музыку публике", 
-             "https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij", 3)
-        ]
-        
-        cursor.executemany('''
-            INSERT INTO courses (title, description, link, order_num) 
-            VALUES (?, ?, ?, ?)
-        ''', default_courses)
-        conn.commit()
-    
-    # Получаем активные курсы из базы данных, отсортированные по order_num
-    courses = conn.execute('''
-        SELECT * FROM courses 
-        WHERE is_active = 1 
-        ORDER BY order_num
-    ''').fetchall()
-    conn.close()
-    
-    if not courses:
-        # Если курсов нет в базе или все неактивны, показываем заглушку
-        text = "💼 Наши курсы:\n\n"
-        text += "1️⃣ Для начинающих - Основы музыкального продюсирования\n"
-        text += "👉 https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya\n\n"
-        text += "2️⃣ Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами\n"
-        text += "👉 https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa\n\n"
-        text += "3️⃣ Продвинутый курс - Техника live выступлений: играй вживую свои треки\n"
-        text += "👉 https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij\n\n"
-    else:
-        text = "💼 Наши курсы:\n\n"
-        
-        for i, course in enumerate(courses, 1):
-            # Добавляем emoji в зависимости от номера курса
-            if i == 1:
-                emoji = "1️⃣"
-            elif i == 2:
-                emoji = "2️⃣"
-            elif i == 3:
-                emoji = "3️⃣"
-            elif i == 4:
-                emoji = "4️⃣"
-            elif i == 5:
-                emoji = "5️⃣"
-            else:
-                emoji = "🔹"
-            
-            text += f"{emoji} {course['title']}\n"
-            if course['description']:
-                text += f"{course['description']}\n"
-            text += f"👉 {course['link']}\n\n"
-    
-    keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    query.edit_message_text(text=text, reply_markup=reply_markup, disable_web_page_preview=True)
-
-def request_feedback(update: Update, context: CallbackContext):
-    query = update.callback_query
-    user_id = query.from_user.id
-    
-    # Переименовываем функцию из "Обратная связь" в "Напиши нам"
-    text = "✍️ Напишите нам сообщение, и наша команда ответит вам в ближайшее время.\n\n"
-    text += "Что бы вы хотели узнать или сообщить?"
-    
-    context.user_data['waiting_for_feedback'] = True
-    
-    keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    query.edit_message_text(text=text, reply_markup=reply_markup)
-
-# Функция для показа текущего материала курса
-def show_current_material(update: Update, context: CallbackContext, path_id):
-    query = update.callback_query
-    user_id = query.from_user.id
-    
-    conn = get_db_connection()
-    
-    # Получаем информацию о цепочке
-    sequence = conn.execute("SELECT * FROM content_sequences WHERE sequence_id = ?", (path_id,)).fetchone()
-    
-    if not sequence:
-        conn.close()
-        query.edit_message_text("Выбранный курс не найден. Пожалуйста, выберите другой курс.",
-                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
-        return
-    
-    # Получаем текущий день пользователя в этой последовательности
-    user_sequence = conn.execute("""
-        SELECT * FROM user_sequences 
-        WHERE user_id = ? AND sequence_id = ? AND is_active = 1
-    """, (user_id, path_id)).fetchone()
-    
-    if not user_sequence or user_sequence['current_day'] == 0:
-        conn.close()
-        query.edit_message_text("У вас нет активного прогресса по этому курсу.",
-                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
-        return
-    
-    current_day = user_sequence['current_day']
-    
-    # Получаем текущий материал
-    current_content = conn.execute("""
-        SELECT c.* 
-        FROM sequence_items si
-        JOIN content c ON si.content_id = c.content_id
-        WHERE si.sequence_id = ? AND si.day_number = ?
-    """, (path_id, current_day)).fetchone()
-    
-    if not current_content:
-        conn.close()
-        query.edit_message_text("Материал не найден. Пожалуйста, обратитесь в поддержку.",
-                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
-        return
-    
-    # Формируем текст сообщения
-    message_text = f"🎓 Ваш текущий материал курса \"{sequence['title']}\" (день {current_day} из {sequence['days_count']}):\n\n"
-    message_text += f"📌 {current_content['title']}\n"
-    message_text += f"📝 {current_content['description']}\n"
-    
-    if current_content['link']:
-        message_text += f"🔗 {current_content['link']}\n"
-    
-    # Если это последний день курса, добавляем промокод
-    if current_day == sequence['days_count']:
-        message_text += "\n🎉 Поздравляем с завершением мини-курса! 🎉\n"
-        message_text += "Вы успешно прошли все этапы обучения.\n\n"
-        message_text += "🎁 Специально для вас мы подготовили ПРОМОКОД на скидку 20% на полный курс:\n"
-        message_text += "PROMO_" + sequence['title'].replace(" ", "_").upper() + "\n\n"
-        message_text += "Используйте его при оформлении нашего полного курса на сайте:\n"
-        message_text += "https://www.flatloops.ru/education\n\n"
-        message_text += "Промокод действителен в течение 7 дней. Не упустите возможность!"
-    
-    conn.close()
-    
-    # Отправляем сообщение с материалом и кнопкой возврата
-    query.edit_message_text(text=message_text, 
-                           reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
-
-# Новая функция для показа доступных образовательных цепочек
-def show_educational_paths(update: Update, context: CallbackContext):
-    query = update.callback_query
-    user_id = query.from_user.id
+def handle_educational_paths(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
     
     conn = get_db_connection()
     
@@ -524,22 +316,176 @@ def show_educational_paths(update: Update, context: CallbackContext):
     else:
         if not active_paths:  # Если нет ни активных, ни доступных цепочек
             text += "В настоящее время нет доступных образовательных курсов.\n"
-    
-    # Добавляем кнопки для просмотра текущих материалов - вертикально
+
+    # Отправляем информацию с инлайн-кнопками для действий с курсами
     keyboard = []
     for path in active_paths:
         keyboard.append([InlineKeyboardButton(f"📖 Просмотреть: {path['title']}", 
                                            callback_data=f"view_current_{path['sequence_id']}")])
     
-    # Добавляем кнопки для выбора новых курсов - вертикально
     for path in paths:
         keyboard.append([InlineKeyboardButton(f"▶️ Начать: {path['title']}", 
                                            callback_data=f"select_path_{path['sequence_id']}")])
     
-    keyboard.append([InlineKeyboardButton("Назад", callback_data="main_menu")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    if keyboard:  # Если есть хоть одна кнопка
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(text=text, reply_markup=reply_markup)
+    else:
+        update.message.reply_text(text=text)
+
+def handle_courses(update: Update, context: CallbackContext):
+    conn = get_db_connection()
+    # Получаем активные курсы из базы данных, отсортированные по order_num
+    courses = conn.execute('''
+        SELECT * FROM courses 
+        WHERE is_active = 1 
+        ORDER BY order_num
+    ''').fetchall()
+    conn.close()
     
-    query.edit_message_text(text=text, reply_markup=reply_markup)
+    if not courses:
+        # Если курсов нет в базе или все неактивны, показываем заглушку
+        text = "💼 Наши курсы:\n\n"
+        text += "1️⃣ Для начинающих - Основы музыкального продюсирования\n"
+        text += "👉 https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya\n\n"
+        text += "2️⃣ Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами\n"
+        text += "👉 https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa\n\n"
+        text += "3️⃣ Продвинутый курс - Техника live выступлений: играй вживую свои треки\n"
+        text += "👉 https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij\n\n"
+    else:
+        text = "💼 Наши курсы:\n\n"
+        
+        for i, course in enumerate(courses, 1):
+            # Добавляем emoji в зависимости от номера курса
+            if i == 1:
+                emoji = "1️⃣"
+            elif i == 2:
+                emoji = "2️⃣"
+            elif i == 3:
+                emoji = "3️⃣"
+            elif i == 4:
+                emoji = "4️⃣"
+            elif i == 5:
+                emoji = "5️⃣"
+            else:
+                emoji = "🔹"
+            
+            text += f"{emoji} {course['title']}\n"
+            if course['description']:
+                text += f"{course['description']}\n"
+            text += f"👉 {course['link']}\n\n"
+    
+    update.message.reply_text(text=text, disable_web_page_preview=True)
+
+def handle_streams(update: Update, context: CallbackContext):
+    conn = get_db_connection()
+    upcoming_streams = conn.execute("""
+    SELECT stream_id, title, description, stream_date, is_closed
+    FROM streams
+    WHERE stream_date > datetime('now')
+    ORDER BY stream_date
+    LIMIT 5
+    """).fetchall()
+    conn.close()
+    
+    if not upcoming_streams:
+        update.message.reply_text(
+            "В настоящее время нет запланированных стримов. "
+            "Мы сообщим вам, когда появятся новые стримы!"
+        )
+        return
+    
+    text = "📺 Ближайшие стримы:\n\n"
+    for stream in upcoming_streams:
+        # Форматируем дату из строки
+        try:
+            stream_date = datetime.fromisoformat(stream['stream_date'].replace('Z', '+00:00'))
+            formatted_date = stream_date.strftime('%d.%m.%Y %H:%M')
+        except:
+            formatted_date = stream['stream_date']  # Если не удалось преобразовать, оставляем как есть
+        
+        text += f"🎬 {stream['title']}\n"
+        text += f"📝 {stream['description']}\n"
+        text += f"📅 {formatted_date}\n"
+        if stream['is_closed']:
+            text += "🔒 Закрытый стрим\n"
+        text += "\n"
+    
+    update.message.reply_text(text=text)
+
+def handle_feedback(update: Update, context: CallbackContext):
+    # Переименовываем функцию из "Обратная связь" в "Напиши нам"
+    text = "✍️ Напишите нам сообщение, и наша команда ответит вам в ближайшее время.\n\n"
+    text += "Что бы вы хотели узнать или сообщить?"
+    
+    context.user_data['waiting_for_feedback'] = True
+    
+    update.message.reply_text(text=text)
+
+# Функция для показа текущего материала курса
+def show_current_material(update: Update, context: CallbackContext, path_id):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    conn = get_db_connection()
+    
+    # Получаем информацию о цепочке
+    sequence = conn.execute("SELECT * FROM content_sequences WHERE sequence_id = ?", (path_id,)).fetchone()
+    
+    if not sequence:
+        conn.close()
+        query.edit_message_text("Выбранный курс не найден. Пожалуйста, выберите другой курс.",
+                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
+        return
+    
+    # Получаем текущий день пользователя в этой последовательности
+    user_sequence = conn.execute("""
+        SELECT * FROM user_sequences 
+        WHERE user_id = ? AND sequence_id = ? AND is_active = 1
+    """, (user_id, path_id)).fetchone()
+    
+    if not user_sequence or user_sequence['current_day'] == 0:
+        conn.close()
+        query.edit_message_text("У вас нет активного прогресса по этому курсу.")
+        return
+    
+    current_day = user_sequence['current_day']
+    
+    # Получаем текущий материал
+    current_content = conn.execute("""
+        SELECT c.* 
+        FROM sequence_items si
+        JOIN content c ON si.content_id = c.content_id
+        WHERE si.sequence_id = ? AND si.day_number = ?
+    """, (path_id, current_day)).fetchone()
+    
+    if not current_content:
+        conn.close()
+        query.edit_message_text("Материал не найден. Пожалуйста, обратитесь в поддержку.")
+        return
+    
+    # Формируем текст сообщения
+    message_text = f"🎓 Ваш текущий материал курса \"{sequence['title']}\" (день {current_day} из {sequence['days_count']}):\n\n"
+    message_text += f"📌 {current_content['title']}\n"
+    message_text += f"📝 {current_content['description']}\n"
+    
+    if current_content['link']:
+        message_text += f"🔗 {current_content['link']}\n"
+    
+    # Если это последний день курса, добавляем промокод
+    if current_day == sequence['days_count']:
+        message_text += "\n🎉 Поздравляем с завершением мини-курса! 🎉\n"
+        message_text += "Вы успешно прошли все этапы обучения.\n\n"
+        message_text += "🎁 Специально для вас мы подготовили ПРОМОКОД на скидку 20% на полный курс:\n"
+        message_text += "PROMO_" + sequence['title'].replace(" ", "_").upper() + "\n\n"
+        message_text += "Используйте его при оформлении нашего полного курса на сайте:\n"
+        message_text += "https://www.flatloops.ru/education\n\n"
+        message_text += "Промокод действителен в течение 7 дней. Не упустите возможность!"
+    
+    conn.close()
+    
+    # Отправляем сообщение с материалом
+    query.edit_message_text(text=message_text)
 
 # Функция для подписки на образовательную цепочку
 def subscribe_to_path(update: Update, context: CallbackContext, path_id):
@@ -610,13 +556,7 @@ def subscribe_to_path(update: Update, context: CallbackContext, path_id):
     conn.close()
     
     # Отвечаем пользователю
-    keyboard = [
-        [InlineKeyboardButton("Перейти к курсам", callback_data="educational_paths")],
-        [InlineKeyboardButton("Главное меню", callback_data="main_menu")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    query.edit_message_text(text=message_text, reply_markup=reply_markup)
+    query.edit_message_text(text=message_text)
 
 # Словарь для отслеживания последних сообщений пользователей
 last_message_times = {}
@@ -642,6 +582,23 @@ def process_message(update: Update, context: CallbackContext):
             f"Привет, {user.first_name}! Чтобы начать работу с ботом, нажмите кнопку Старт ниже:",
             reply_markup=reply_markup
         )
+        return
+    
+    # Обработка команд клавиатуры
+    if text == "📚 Полезные материалы":
+        handle_useful_content(update, context)
+        return
+    elif text == "🎓 Бесплатные мини курсы":
+        handle_educational_paths(update, context)
+        return
+    elif text == "💼 Наши курсы":
+        handle_courses(update, context)
+        return
+    elif text == "🎬 Стримы":
+        handle_streams(update, context)
+        return
+    elif text == "✍️ Напиши нам":
+        handle_feedback(update, context)
         return
     
     # Отправляем сообщение в админ-панель в любом случае
@@ -680,10 +637,6 @@ def process_message(update: Update, context: CallbackContext):
                 "Спасибо за ваше сообщение! Наша команда скоро свяжется с вами."
             )
             last_message_times[user_id] = current_time
-    
-    # Показываем главное меню только для новых пользователей или если прошло более 7 дней
-    if not last_time or (current_time - last_time).days > 7:
-        show_main_menu(update, context)
 
 # Функции для уведомлений
 def schedule_user_notifications(user_id):
