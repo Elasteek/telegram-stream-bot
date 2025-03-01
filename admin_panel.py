@@ -5,6 +5,8 @@ from flask import Flask, render_template, redirect, url_for, flash, request, ses
 from datetime import datetime, timedelta
 import json
 import random
+from werkzeug.utils import secure_filename
+import requests
 
 # Настройка логирования для отладки
 logging.basicConfig(level=logging.DEBUG)
@@ -12,6 +14,19 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'debug_key_123'
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Ограничение размера файла (16MB)
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'mp3', 'mp4'}
+
+# Создаем папку для загрузок, если она не существует
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'images'), exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'files'), exist_ok=True)
+
+# Функция для проверки разрешенных расширений файлов
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 # Функция для подключения к базе данных
 def get_db_connection():
@@ -37,7 +52,7 @@ def init_db():
     )
     ''')
     
-    # Создаем таблицу контента
+    # Создаем таблицу контента с добавлением полей для изображений и файлов
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS content (
         content_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,6 +60,8 @@ def init_db():
         title TEXT NOT NULL,
         description TEXT,
         link TEXT,
+        image_url TEXT,
+        file_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
@@ -99,7 +116,6 @@ def init_db():
     ''')
     
     # Создаем таблицу истории сообщений с новыми полями
-    # ВАЖНОЕ ИЗМЕНЕНИЕ: добавлен столбец is_sent сразу при создании таблицы
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS message_history (
         message_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,7 +150,6 @@ def init_db():
         cursor.executemany('INSERT INTO users (user_id, username, first_name, last_name, phone, registration_date) VALUES (?, ?, ?, ?, ?, ?)', test_users)
         
         # Добавим тестовые сообщения от пользователей для демонстрации
-        # ВАЖНОЕ ИЗМЕНЕНИЕ: добавлен параметр is_sent в запрос
         test_messages = [
             (12345, 'user', 'Здравствуйте! Как мне начать работу с вашим ботом?', 'incoming', 0, 0, None, (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')),
             (12346, 'user', 'У меня не получается запустить видео из вашей последней рассылки', 'incoming', 1, 0, None, (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')),
@@ -335,7 +350,7 @@ def delete_stream(stream_id):
     flash('Стрим успешно удален!', 'success')
     return redirect(url_for('streams'))
 
-# Маршруты для управления контентом
+# Маршруты для управления контентом с поддержкой файлов и изображений
 @app.route('/content')
 def content():
     if not session.get('logged_in'):
@@ -358,9 +373,33 @@ def add_content():
         description = request.form['description']
         link = request.form['link']
         
+        # Обработка загруженного изображения
+        image_url = None
+        if 'image' in request.files:
+            image = request.files['image']
+            if image.filename != '' and allowed_file(image.filename):
+                filename = secure_filename(image.filename)
+                image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'images', filename)
+                image.save(image_path)
+                # URL для доступа к изображению
+                image_url = f'/static/uploads/images/{filename}'
+        
+        # Обработка загруженного файла
+        file_url = None
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename != '' and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], 'files', filename)
+                file.save(file_path)
+                # URL для доступа к файлу
+                file_url = f'/static/uploads/files/{filename}'
+        
         conn = get_db_connection()
-        conn.execute('INSERT INTO content (content_type, title, description, link) VALUES (?, ?, ?, ?)',
-                    (content_type, title, description, link))
+        conn.execute('''
+            INSERT INTO content (content_type, title, description, link, image_url, file_url) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (content_type, title, description, link, image_url, file_url))
         conn.commit()
         conn.close()
         
@@ -388,9 +427,35 @@ def edit_content(content_id):
         description = request.form['description']
         link = request.form['link']
         
+        # Инициализируем значениями из БД
+        image_url = content['image_url']
+        file_url = content['file_url']
+        
+        # Обработка загруженного изображения
+        if 'image' in request.files:
+            image = request.files['image']
+            if image.filename != '' and allowed_file(image.filename):
+                filename = secure_filename(image.filename)
+                image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'images', filename)
+                image.save(image_path)
+                # URL для доступа к изображению
+                image_url = f'/static/uploads/images/{filename}'
+        
+        # Обработка загруженного файла
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename != '' and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], 'files', filename)
+                file.save(file_path)
+                # URL для доступа к файлу
+                file_url = f'/static/uploads/files/{filename}'
+        
         conn = get_db_connection()
-        conn.execute('UPDATE content SET content_type = ?, title = ?, description = ?, link = ? WHERE content_id = ?',
-                    (content_type, title, description, link, content_id))
+        conn.execute('''
+            UPDATE content SET content_type = ?, title = ?, description = ?, link = ?, image_url = ?, file_url = ? 
+            WHERE content_id = ?
+        ''', (content_type, title, description, link, image_url, file_url, content_id))
         conn.commit()
         conn.close()
         
@@ -405,6 +470,29 @@ def delete_content(content_id):
         return redirect(url_for('login'))
     
     conn = get_db_connection()
+    
+    # Получаем информацию о файлах перед удалением записи
+    content = conn.execute('SELECT image_url, file_url FROM content WHERE content_id = ?', (content_id,)).fetchone()
+    
+    if content:
+        # Удаляем файлы, если они существуют
+        if content['image_url']:
+            try:
+                image_path = os.path.join(app.root_path, content['image_url'].lstrip('/'))
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            except Exception as e:
+                logger.error(f"Ошибка при удалении изображения: {e}")
+                
+        if content['file_url']:
+            try:
+                file_path = os.path.join(app.root_path, content['file_url'].lstrip('/'))
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                logger.error(f"Ошибка при удалении файла: {e}")
+    
+    # Удаляем запись из базы данных
     conn.execute('DELETE FROM content WHERE content_id = ?', (content_id,))
     conn.commit()
     conn.close()
@@ -646,11 +734,12 @@ def user_detail(user_id):
     ''', (user_id,)).fetchall()
     
     # Получаем историю сообщений в формате диалога
+    # ИЗМЕНЕНИЕ: Обратный порядок сообщений (старые внизу, новые вверху)
     message_history = conn.execute('''
         SELECT *
         FROM message_history
         WHERE user_id = ?
-        ORDER BY sent_at DESC
+        ORDER BY sent_at ASC
         LIMIT 50
     ''', (user_id,)).fetchall()
     
@@ -1018,8 +1107,77 @@ def receive_message():
     conn.commit()
     conn.close()
     
+    # Отправка уведомления в группу администраторов в Telegram
+    try:
+        group_id = os.getenv('ADMIN_GROUP_ID')  # ID группы нужно добавить в .env
+        if group_id:
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            if bot_token:
+                # Формируем текст уведомления
+                username_str = f"@{data.get('username')}" if data.get('username') else ""
+                user_name = f"{data.get('first_name')} {data.get('last_name') or ''}".strip()
+                
+                notification_text = f"📩 Новое сообщение от пользователя {user_name} {username_str} (ID: {user_id}):\n\n{text}"
+                
+                # Отправляем уведомление в группу
+                telegram_api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                payload = {
+                    "chat_id": group_id,
+                    "text": notification_text,
+                    "parse_mode": "HTML"
+                }
+                
+                response = requests.post(telegram_api_url, json=payload)
+                if response.status_code != 200:
+                    logger.error(f"Не удалось отправить уведомление в группу: {response.text}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке уведомления в группу: {e}")
+    
     return jsonify({'success': True})
 
+# API для получения сообщений для отправки (для бота)
+@app.route('/api/bot/get_messages')
+def get_messages_for_bot():
+    conn = get_db_connection()
+    
+    # Получаем сообщения, которые нужно отправить (исходящие, не отправленные)
+    messages = conn.execute('''
+        SELECT message_id as id, user_id, text
+        FROM message_history
+        WHERE direction = 'outgoing' AND is_sent = 0
+        LIMIT 10
+    ''').fetchall()
+    
+    conn.close()
+    
+    # Конвертируем в список словарей
+    result = []
+    for message in messages:
+        result.append({
+            'id': message['id'],
+            'user_id': message['user_id'],
+            'text': message['text']
+        })
+    
+    return jsonify(result)
+
+# API для отметки сообщения как отправленного
+@app.route('/api/bot/mark_sent/<int:message_id>', methods=['POST'])
+def mark_message_sent(message_id):
+    conn = get_db_connection()
+    
+    conn.execute('''
+        UPDATE message_history
+        SET is_sent = 1
+        WHERE message_id = ?
+    ''', (message_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
+
+# Маршрут для показа статистики
 @app.route('/statistics')
 def statistics():
     if not session.get('logged_in'):
@@ -1115,48 +1273,6 @@ def logout():
     session.clear()
     flash('Вы вышли из системы!', 'info')
     return redirect(url_for('login'))
-
-# API для получения сообщений для отправки (для бота)
-@app.route('/api/bot/get_messages')
-def get_messages_for_bot():
-    conn = get_db_connection()
-    
-    # Получаем сообщения, которые нужно отправить (исходящие, не отправленные)
-    messages = conn.execute('''
-        SELECT message_id as id, user_id, text
-        FROM message_history
-        WHERE direction = 'outgoing' AND is_sent = 0
-        LIMIT 10
-    ''').fetchall()
-    
-    conn.close()
-    
-    # Конвертируем в список словарей
-    result = []
-    for message in messages:
-        result.append({
-            'id': message['id'],
-            'user_id': message['user_id'],
-            'text': message['text']
-        })
-    
-    return jsonify(result)
-
-# API для отметки сообщения как отправленного
-@app.route('/api/bot/mark_sent/<int:message_id>', methods=['POST'])
-def mark_message_sent(message_id):
-    conn = get_db_connection()
-    
-    conn.execute('''
-        UPDATE message_history
-        SET is_sent = 1
-        WHERE message_id = ?
-    ''', (message_id,))
-    
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'success': True})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))

@@ -1,18 +1,16 @@
 """
-Telegram бот для управления стримами и автоматизации оповещений
+Telegram бот для управления полезными материалами и образовательными последовательностями
 """
 import requests
 import os
 import logging
 from datetime import datetime, timedelta
 import sqlite3
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, Filters, CallbackContext
 from dotenv import load_dotenv
-import asyncio
 import threading
 import time
-from pytz import utc
 
 def send_message_to_admin(user_id, first_name, last_name, username, text):
     admin_panel_url = "https://rough-rora-flatloops-eaeed163.koyeb.app/api/bot/receive_message"
@@ -84,8 +82,8 @@ def start(update: Update, context: CallbackContext):
     
     if existing_user:
         update.message.reply_text(
-            f"Привет, {user.first_name}! Рады видеть вас снова! "
-            f"Вы уже зарегистрированы для получения уведомлений о стримах."
+            f"Привет, {user.first_name}! Рады видеть вас снова!",
+            reply_markup=ReplyKeyboardRemove()
         )
         # Добавляем приглашение в канал
         update.message.reply_text(
@@ -125,9 +123,8 @@ def process_contact(update: Update, context: CallbackContext):
     
     # Отправляем благодарность
     update.message.reply_text(
-        f"Спасибо за регистрацию, {user.first_name}! "
-        f"Теперь вы будете получать уведомления о наших стримах.",
-        reply_markup=None  # Убираем клавиатуру запроса контакта
+        f"Спасибо за регистрацию, {user.first_name}! ",
+        reply_markup=ReplyKeyboardRemove()  # Убираем клавиатуру запроса контакта
     )
     
     # Добавляем приглашение в канал
@@ -144,22 +141,23 @@ def process_contact(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 def show_main_menu(update: Update, context: CallbackContext):
+    # Меняем порядок кнопок - сначала полезные материалы, затем всё остальное
     keyboard = [
-        [InlineKeyboardButton("🎬 Ближайшие стримы", callback_data="upcoming_streams")],
         [InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content")],
         [InlineKeyboardButton("🎓 Наши курсы", callback_data="our_courses")],
-        [InlineKeyboardButton("💬 Обратная связь", callback_data="feedback")]
+        [InlineKeyboardButton("🎬 Ближайшие стримы", callback_data="upcoming_streams")],
+        [InlineKeyboardButton("✍️ Напиши нам", callback_data="feedback")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     # Проверяем, откуда был вызван метод
     if update.callback_query:
         update.callback_query.edit_message_text(
-            "Главное меню бота", reply_markup=reply_markup
+            "Выберите раздел:", reply_markup=reply_markup
         )
     else:
         update.message.reply_text(
-            "Главное меню бота", reply_markup=reply_markup
+            "Выберите раздел:", reply_markup=reply_markup
         )
 
 def button_handler(update: Update, context: CallbackContext):
@@ -276,38 +274,24 @@ def request_feedback(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = query.from_user.id
     
-    # Получаем последний стрим, на котором был пользователь
-    conn = get_db_connection()
-    last_stream = conn.execute("""
-    SELECT stream_id, title FROM streams 
-    WHERE stream_date < datetime('now') 
-    ORDER BY stream_date DESC 
-    LIMIT 1
-    """).fetchone()
-    conn.close()
+    # Переименовываем функцию из "Обратная связь" в "Напиши нам"
+    text = "✍️ Напишите нам сообщение, и наша команда ответит вам в ближайшее время.\n\n"
+    text += "Что бы вы хотели узнать или сообщить?"
     
-    if not last_stream:
-        query.edit_message_text(
-            "У нас еще не было стримов, по которым можно оставить обратную связь. "
-            "После участия в стриме, вы сможете поделиться своим мнением!",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
-        )
-        return
-    
-    context.user_data['feedback_stream_id'] = last_stream['stream_id']
     context.user_data['waiting_for_feedback'] = True
-    
-    text = f"Пожалуйста, оставьте обратную связь по стриму \"{last_stream['title']}\"\n\n"
-    text += "Напишите ваш отзыв в ответ на это сообщение."
     
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     query.edit_message_text(text=text, reply_markup=reply_markup)
 
+# Словарь для отслеживания последних сообщений пользователей
+last_message_times = {}
+
 def process_message(update: Update, context: CallbackContext):
     """Обрабатывает все текстовые сообщения от пользователя"""
     user = update.effective_user
+    user_id = user.id
     text = update.message.text
     
     # Отправляем сообщение в админ-панель в любом случае
@@ -321,48 +305,40 @@ def process_message(update: Update, context: CallbackContext):
     
     # Проверяем, ожидается ли обратная связь от пользователя
     if context.user_data.get('waiting_for_feedback'):
-        stream_id = context.user_data.get('feedback_stream_id')
-        
-        # Сохраняем обратную связь в базу данных
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS feedback (
-            feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            stream_id INTEGER,
-            feedback_text TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
-        
-        cursor.execute(
-            "INSERT INTO feedback (user_id, stream_id, feedback_text) VALUES (?, ?, ?)",
-            (user.id, stream_id, text)
-        )
-        conn.commit()
-        conn.close()
-        
-        update.message.reply_text(
-            "Спасибо за вашу обратную связь! Мы ценим ваше мнение и используем его для улучшения наших стримов."
-        )
-        
         # Сбрасываем флаг ожидания обратной связи
         del context.user_data['waiting_for_feedback']
-        del context.user_data['feedback_stream_id']
         
-        # Показываем главное меню
-        show_main_menu(update, context)
-    else:
-        # Это обычное сообщение
         update.message.reply_text(
             "Спасибо за ваше сообщение! Наша команда скоро свяжется с вами."
         )
+        
+        # Добавляем текущее время в словарь последних сообщений
+        last_message_times[user_id] = datetime.now()
+        
+        # Показываем главное меню (без добавления кнопок после сообщения "Спасибо")
+        # Это одно из ключевых изменений - убираем дублирование меню
+        return
+    else:
+        # Проверяем, когда пользователь последний раз получал уведомление
+        current_time = datetime.now()
+        last_time = last_message_times.get(user_id)
+        
+        # Если прошло менее 24 часов, не отправляем "Спасибо за сообщение"
+        if last_time and (current_time - last_time).total_seconds() < 86400:  # 86400 секунд = 24 часа
+            pass
+        else:
+            update.message.reply_text(
+                "Спасибо за ваше сообщение! Наша команда скоро свяжется с вами."
+            )
+            last_message_times[user_id] = current_time
+    
+    # Показываем главное меню только для новых пользователей или если прошло более 7 дней
+    if not last_time or (current_time - last_time).days > 7:
         show_main_menu(update, context)
 
 # Функции для уведомлений
 def schedule_user_notifications(user_id):
-    """Планирует уведомления для пользователя на основе предстоящих стримов"""
+    """Планирует уведомления для пользователя на основе контента и образовательных последовательностей"""
     
     conn = get_db_connection()
     
@@ -372,6 +348,7 @@ def schedule_user_notifications(user_id):
         notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         stream_id INTEGER,
+        content_id INTEGER,
         notification_type TEXT,
         sent INTEGER DEFAULT 0,
         scheduled_time TEXT
@@ -414,8 +391,9 @@ def schedule_user_notifications(user_id):
         days_until_stream = (stream_date - now).days
         
         # Планируем уведомления за день, за два и т.д. до стрима
-        for day in range(min(days_until_stream, 7), 0, -2):  # Каждые 2 дня, но не больше недели
-            notification_date = stream_date - timedelta(days=day)
+        # Уменьшаем количество уведомлений о стримах, т.к. они теперь не в приоритете
+        if days_until_stream > 0:
+            notification_date = stream_date - timedelta(days=1)
             
             # Добавляем уведомление в базу
             conn.execute(
@@ -438,59 +416,61 @@ def schedule_user_notifications(user_id):
                 """,
                 (user_id, stream_id, 'day_of_stream', morning_time.strftime('%Y-%m-%d %H:%M:%S'))
             )
+    
+    # Планируем образовательные последовательности для пользователя
+    # Получаем активные последовательности пользователя
+    user_sequences = conn.execute("""
+    SELECT us.*, cs.days_count
+    FROM user_sequences us
+    JOIN content_sequences cs ON us.sequence_id = cs.sequence_id
+    WHERE us.user_id = ? AND us.is_active = 1
+    """, (user_id,)).fetchall()
+    
+    for sequence in user_sequences:
+        sequence_id = sequence['sequence_id']
+        current_day = sequence['current_day']
+        days_count = sequence['days_count']
         
-        # Напоминание за час до стрима
-        hour_before = stream_date - timedelta(hours=1)
-        if hour_before > now:
-            conn.execute(
-                """
+        # Если пользователь еще не прошел всю последовательность
+        if current_day < days_count:
+            # Получаем контент для следующего дня
+            next_day = current_day + 1
+            content_item = conn.execute("""
+            SELECT si.content_id
+            FROM sequence_items si
+            WHERE si.sequence_id = ? AND si.day_number = ?
+            """, (sequence_id, next_day)).fetchone()
+            
+            if content_item:
+                content_id = content_item['content_id']
+                
+                # Планируем отправку на следующий день
+                next_notification_date = datetime.now() + timedelta(days=1)
+                next_notification_time = next_notification_date.replace(hour=10, minute=0, second=0)
+                
+                conn.execute("""
                 INSERT INTO notifications 
-                (user_id, stream_id, notification_type, scheduled_time) 
+                (user_id, content_id, notification_type, scheduled_time) 
                 VALUES (?, ?, ?, ?)
-                """,
-                (user_id, stream_id, 'hour_before', hour_before.strftime('%Y-%m-%d %H:%M:%S'))
-            )
-        
-        # Уведомление во время стрима
-        conn.execute(
-            """
-            INSERT INTO notifications 
-            (user_id, stream_id, notification_type, scheduled_time) 
-            VALUES (?, ?, ?, ?)
-            """,
-            (user_id, stream_id, 'during_stream', stream_date.strftime('%Y-%m-%d %H:%M:%S'))
-        )
-        
-        # Уведомление после стрима
-        after_stream = stream_date + timedelta(hours=2)
-        conn.execute(
-            """
-            INSERT INTO notifications 
-            (user_id, stream_id, notification_type, scheduled_time) 
-            VALUES (?, ?, ?, ?)
-            """,
-            (user_id, stream_id, 'after_stream', after_stream.strftime('%Y-%m-%d %H:%M:%S'))
-        )
+                """, (user_id, content_id, 'sequence', next_notification_time.strftime('%Y-%m-%d %H:%M:%S')))
     
     # Планируем бонусные уведомления (контент)
     content_count = conn.execute("SELECT COUNT(*) FROM content").fetchone()[0]
     
     if content_count > 0:
         # Определяем, сколько бонусных уведомлений планировать
-        bonus_count = min(content_count, 10)  # Не более 10 бонусных уведомлений
+        # Увеличиваем количество бонусных уведомлений, т.к. контент теперь в приоритете
+        bonus_count = min(content_count, 15)  # До 15 бонусных уведомлений
         
         for i in range(bonus_count):
-            # Уведомление каждые 2-3 дня
-            bonus_date = now + timedelta(days=i*2 + 1)
+            # Уведомление каждые 1-2 дня
+            bonus_date = datetime.now() + timedelta(days=i*1.5 + 1)
             
-            conn.execute(
-                """
-                INSERT INTO notifications 
-                (user_id, stream_id, notification_type, scheduled_time) 
-                VALUES (?, NULL, ?, ?)
-                """,
-                (user_id, 'bonus', bonus_date.strftime('%Y-%m-%d %H:%M:%S'))
-            )
+            conn.execute("""
+            INSERT INTO notifications 
+            (user_id, content_id, notification_type, scheduled_time) 
+            VALUES (?, NULL, ?, ?)
+            """, (user_id, 'bonus', bonus_date.strftime('%Y-%m-%d %H:%M:%S')))
     
     conn.commit()
     conn.close()
@@ -505,10 +485,12 @@ def send_pending_notifications(bot):
     # Получаем все запланированные уведомления, которые нужно отправить
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     notifications = conn.execute("""
-    SELECT n.notification_id, n.user_id, n.stream_id, n.notification_type,
-           s.title, s.description, s.stream_date, s.is_closed, s.access_link
+    SELECT n.notification_id, n.user_id, n.stream_id, n.content_id, n.notification_type,
+           s.title as stream_title, s.description as stream_desc, s.stream_date, s.is_closed, s.access_link,
+           c.title as content_title, c.description as content_desc, c.link as content_link
     FROM notifications n
     LEFT JOIN streams s ON n.stream_id = s.stream_id
+    LEFT JOIN content c ON n.content_id = c.content_id
     WHERE n.sent = 0 AND n.scheduled_time <= ?
     """, (now,)).fetchall()
     
@@ -517,7 +499,6 @@ def send_pending_notifications(bot):
     for notification in notifications:
         notification_id = notification['notification_id']
         user_id = notification['user_id']
-        stream_id = notification['stream_id']
         notification_type = notification['notification_type']
         
         # Готовим текст сообщения в зависимости от типа уведомления
@@ -525,23 +506,22 @@ def send_pending_notifications(bot):
         
         if notification_type == 'reminder':
             message_text = f"🔔 Напоминание о предстоящем стриме!\n\n"
-            if stream_id:
-                message_text += f"📺 {notification['title']}\n"
-                message_text += f"📝 {notification['description']}\n"
+            message_text += f"📺 {notification['stream_title']}\n"
+            message_text += f"📝 {notification['stream_desc']}\n"
                 
-                # Форматируем дату
-                try:
-                    stream_date = datetime.fromisoformat(notification['stream_date'].replace('Z', '+00:00'))
-                    days_until = (stream_date - datetime.now()).days
-                    message_text += f"⏳ До стрима осталось: {days_until} дней\n"
-                    message_text += f"📅 Дата: {stream_date.strftime('%d.%m.%Y %H:%M')}\n"
-                except:
-                    message_text += f"📅 Дата: {notification['stream_date']}\n"
+            # Форматируем дату
+            try:
+                stream_date = datetime.fromisoformat(notification['stream_date'].replace('Z', '+00:00'))
+                days_until = (stream_date - datetime.now()).days
+                message_text += f"⏳ До стрима осталось: {days_until} дней\n"
+                message_text += f"📅 Дата: {stream_date.strftime('%d.%m.%Y %H:%M')}\n"
+            except:
+                message_text += f"📅 Дата: {notification['stream_date']}\n"
         
         elif notification_type == 'day_of_stream':
             message_text = f"🎬 Сегодня состоится стрим!\n\n"
-            message_text += f"📺 {notification['title']}\n"
-            message_text += f"📝 {notification['description']}\n"
+            message_text += f"📺 {notification['stream_title']}\n"
+            message_text += f"📝 {notification['stream_desc']}\n"
             
             # Форматируем время
             try:
@@ -550,22 +530,36 @@ def send_pending_notifications(bot):
             except:
                 pass
         
-        elif notification_type == 'hour_before':
-            message_text = f"⏰ Стрим начнется через час!\n\n"
-            message_text += f"📺 {notification['title']}\n"
-            message_text += f"📝 {notification['description']}\n"
-            message_text += f"🔗 Подготовьтесь к просмотру!\n"
-        
-        elif notification_type == 'during_stream':
-            message_text = f"🔴 Мы в эфире!\n\n"
-            message_text += f"📺 {notification['title']}\n"
-            if notification['is_closed'] and notification['access_link']:
-                message_text += f"🔐 Это закрытый стрим. Ваша ссылка для доступа: {notification['access_link']}\n"
-        
-        elif notification_type == 'after_stream':
-            message_text = f"🎬 Спасибо, что были с нами на стриме!\n\n"
-            message_text += f"📺 {notification['title']}\n"
-            message_text += f"💬 Пожалуйста, оставьте обратную связь, чтобы мы могли улучшить наши стримы.\n"
+        elif notification_type == 'sequence':
+            # Получаем информацию о цепочке
+            sequence_info = conn.execute("""
+            SELECT cs.title, si.day_number, cs.days_count
+            FROM sequence_items si
+            JOIN content_sequences cs ON si.sequence_id = cs.sequence_id
+            WHERE si.content_id = ?
+            """, (notification['content_id'],)).fetchone()
+            
+            if sequence_info:
+                message_text = f"📚 День {sequence_info['day_number']} из {sequence_info['days_count']}: {sequence_info['title']}\n\n"
+                message_text += f"📌 {notification['content_title']}\n"
+                message_text += f"📝 {notification['content_desc']}\n"
+                if notification['content_link']:
+                    message_text += f"🔗 {notification['content_link']}\n"
+                    
+                # Обновляем текущий день в последовательности для пользователя
+                conn.execute("""
+                UPDATE user_sequences
+                SET current_day = ?
+                WHERE user_id = ? AND sequence_id = (
+                    SELECT si.sequence_id FROM sequence_items si WHERE si.content_id = ?
+                )
+                """, (sequence_info['day_number'], user_id, notification['content_id']))
+            else:
+                message_text = f"📚 Полезный материал для вас!\n\n"
+                message_text += f"📌 {notification['content_title']}\n"
+                message_text += f"📝 {notification['content_desc']}\n"
+                if notification['content_link']:
+                    message_text += f"🔗 {notification['content_link']}\n"
         
         elif notification_type == 'bonus':
             # Получаем случайный контент
@@ -712,7 +706,43 @@ def main():
         title TEXT NOT NULL,
         description TEXT,
         link TEXT,
+        image_url TEXT,
+        file_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS content_sequences (
+        sequence_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        days_count INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS sequence_items (
+        item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sequence_id INTEGER NOT NULL,
+        content_id INTEGER NOT NULL,
+        day_number INTEGER NOT NULL,
+        FOREIGN KEY (sequence_id) REFERENCES content_sequences (sequence_id),
+        FOREIGN KEY (content_id) REFERENCES content (content_id)
+    )
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS user_sequences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        sequence_id INTEGER NOT NULL,
+        current_day INTEGER DEFAULT 0,
+        start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_active INTEGER DEFAULT 1,
+        FOREIGN KEY (sequence_id) REFERENCES content_sequences (sequence_id),
+        FOREIGN KEY (user_id) REFERENCES users (user_id)
     )
     ''')
     
@@ -721,6 +751,7 @@ def main():
         notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         stream_id INTEGER,
+        content_id INTEGER,
         notification_type TEXT,
         sent INTEGER DEFAULT 0,
         scheduled_time TEXT
@@ -756,7 +787,7 @@ def main():
     dispatcher.add_handler(conversation_handler)
     dispatcher.add_handler(CallbackQueryHandler(button_handler))
     
-    # Обработчик текстовых сообщений (заменяет process_feedback)
+    # Обработчик текстовых сообщений
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, process_message))
     
     # Запускаем планировщик уведомлений в отдельном потоке

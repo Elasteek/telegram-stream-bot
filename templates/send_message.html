@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+
+{% block title %}Отправка сообщений{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-2 text-gray-800">Отправка сообщений</h1>
+    <p class="mb-4">Отправляйте сообщения пользователям бота.</p>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                {% if specific_user %}
+                    Отправка сообщения пользователю: {{ 
+specific_user.first_name }} {{ specific_user.last_name }}
+                {% else %}
+                    Выберите получателей и напишите сообщение
+                {% endif %}
+            </h6>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('send_message') }}">
+                <div class="form-group">
+                    <label for="recipient_type">Тип получателей:</label>
+                    <select class="form-control" id="recipient_type" 
+name="recipient_type" required {% if specific_user %}disabled{% endif %}>
+                        <option value="all" {% if not specific_user 
+%}selected{% endif %}>Все пользователи ({{ total_users }})</option>
+                        <option value="sequence">Пользователи 
+цепочки</option>
+                        <option value="selected">Выбранные 
+пользователи</option>
+                        <option value="specific" {% if specific_user 
+%}selected{% endif %}>Конкретный пользователь</option>
+                    </select>
+                </div>
+                
+                {% if specific_user %}
+                    <input type="hidden" name="recipient_type" 
+value="specific">
+                    <input type="hidden" name="user_id" value="{{ 
+specific_user.user_id }}">
+                {% endif %}
+                
+                <!-- Выбор цепочки -->
+                <div class="form-group" id="sequence_selector" 
+style="display: none;">
+                    <label for="sequence_id">Выберите цепочку:</label>
+                    <select class="form-control" id="sequence_id" 
+name="sequence_id">
+                        <option value="">-- Выберите цепочку --</option>
+                        {% for sequence in sequences %}
+                            <option value="{{ sequence.sequence_id }}">{{ 
+sequence.title }} ({{ sequence.subscriber_count }} подписчиков)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Выбор пользователей -->
+                <div class="form-group" id="users_selector" 
+style="display: none;">
+                    <label>Выберите пользователей:</label>
+                    <div class="mt-2" style="max-height: 300px; 
+overflow-y: auto;">
+                        {% for user in users %}
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" 
+class="custom-control-input" id="user_{{ user.user_id }}" name="user_ids" 
+value="{{ user.user_id }}">
+                                <label class="custom-control-label" 
+for="user_{{ user.user_id }}">
+                                    {% if user.username %}@{{ 
+user.username }} - {% endif %}
+                                    {{ user.first_name }} {{ 
+user.last_name }}
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- Конкретный пользователь -->
+                <div class="form-group" id="user_selector" style="display: 
+none;">
+                    <label for="user_id">Выберите пользователя:</label>
+                    <select class="form-control" id="user_id" 
+name="user_id">
+                        <option value="">-- Выберите пользователя 
+--</option>
+                        {% for user in users %}
+                            <option value="{{ user.user_id }}" {% if 
+specific_user and specific_user.user_id == user.user_id %}selected{% endif 
+%}>
+                                {% if user.username %}@{{ user.username }} 
+- {% endif %}
+                                {{ user.first_name }} {{ user.last_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Текст сообщения -->
+                <div class="form-group">
+                    <label for="message_text">Текст сообщения:</label>
+                    <textarea class="form-control" id="message_text" 
+name="message_text" rows="5" required></textarea>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Отправить сообщение
+                </button>
+                
+                <a href="{{ url_for('users') }}" class="btn 
+btn-secondary">
+                    <i class="fas fa-times"></i> Отмена
+                </a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // Показываем нужные поля в зависимости от типа получателей
+        function updateFormFields() {
+            var selectedType = $('#recipient_type').val();
+            
+            $('#sequence_selector').hide();
+            $('#users_selector').hide();
+            $('#user_selector').hide();
+            
+            if (selectedType === 'sequence') {
+                $('#sequence_selector').show();
+            } else if (selectedType === 'selected') {
+                $('#users_selector').show();
+            } else if (selectedType === 'specific') {
+                $('#user_selector').show();
+            }
+        }
+        
+        $('#recipient_type').change(updateFormFields);
+        
+        // Инициализация при загрузке страницы
+        updateFormFields();
+        
+        {% if specific_user %}
+            // Если открыта страница для конкретного пользователя
+            $('#user_selector').show();
+        {% endif %}
+    });
+</script>
+{% endblock %}

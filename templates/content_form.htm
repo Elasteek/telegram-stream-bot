@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ title }}</h6>
+        </div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="content_type">Тип контента</label>
+                    <select class="form-control" id="content_type" 
+name="content_type" required>
+                        <option value="article" {% if content and 
+content.content_type == 'article' %}selected{% endif %}>Статья</option>
+                        <option value="video" {% if content and 
+content.content_type == 'video' %}selected{% endif %}>Видео</option>
+                        <option value="audio" {% if content and 
+content.content_type == 'audio' %}selected{% endif %}>Аудио</option>
+                        <option value="document" {% if content and 
+content.content_type == 'document' %}selected{% endif %}>Документ</option>
+                        <option value="guide" {% if content and 
+content.content_type == 'guide' %}selected{% endif %}>Руководство</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="title">Название</label>
+                    <input type="text" class="form-control" id="title" 
+name="title" value="{{ content.title if content else '' }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Описание</label>
+                    <textarea class="form-control" id="description" 
+name="description" rows="3">{{ content.description if content else '' 
+}}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="link">Ссылка (необязательно)</label>
+                    <input type="text" class="form-control" id="link" 
+name="link" value="{{ content.link if content else '' }}">
+                    <small class="form-text text-muted">Укажите URL для 
+перехода по ссылке</small>
+                </div>
+                
+                <!-- Добавляем новые поля для загрузки изображений и 
+файлов -->
+                <div class="form-group">
+                    <label for="image">Изображение (необязательно)</label>
+                    <input type="file" class="form-control-file" 
+id="image" name="image" accept="image/*">
+                    {% if content and content.image_url %}
+                        <div class="mt-2">
+                            <p>Текущее изображение:</p>
+                            <img src="{{ content.image_url }}" 
+alt="Текущее изображение" style="max-width: 200px; max-height: 200px;">
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label for="file">Файл (необязательно)</label>
+                    <input type="file" class="form-control-file" id="file" 
+name="file">
+                    {% if content and content.file_url %}
+                        <div class="mt-2">
+                            <p>Текущий файл: <a href="{{ content.file_url 
+}}" target="_blank">{{ content.file_url.split('/')[-1] }}</a></p>
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">Поддерживаемые 
+форматы: PDF, DOC(X), XLS(X), MP3, MP4, и другие.</small>
+                </div>
+                
+                <button type="submit" class="btn 
+btn-primary">Сохранить</button>
+                <a href="{{ url_for('content') }}" class="btn 
+btn-secondary">Отмена</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
