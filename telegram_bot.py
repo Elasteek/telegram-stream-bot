@@ -142,11 +142,16 @@ def process_contact(update: Update, context: CallbackContext):
 
 def show_main_menu(update: Update, context: CallbackContext):
     # Меняем порядок кнопок и обновляем название кнопки для образовательных цепочек
+    # Также изменяем расположение кнопок - теперь по 2 в ряд
     keyboard = [
-        [InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content")],
-        [InlineKeyboardButton("🎓 Бесплатные мини курсы", callback_data="educational_paths")],
-        [InlineKeyboardButton("💼 Наши курсы", callback_data="our_courses")],
-        [InlineKeyboardButton("🎬 Ближайшие стримы", callback_data="upcoming_streams")],
+        [
+            InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content"),
+            InlineKeyboardButton("🎓 Бесплатные мини курсы", callback_data="educational_paths")
+        ],
+        [
+            InlineKeyboardButton("💼 Наши курсы", callback_data="our_courses"),
+            InlineKeyboardButton("🎬 Ближайшие стримы", callback_data="upcoming_streams")
+        ],
         [InlineKeyboardButton("✍️ Напиши нам", callback_data="feedback")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -181,6 +186,10 @@ def button_handler(update: Update, context: CallbackContext):
         # Обработка выбора образовательной цепочки
         path_id = int(query.data.split("_")[2])
         subscribe_to_path(update, context, path_id)
+    elif query.data.startswith("view_current_"):
+        # Обработка запроса на просмотр текущего материала курса
+        path_id = int(query.data.split("_")[2])
+        show_current_material(update, context, path_id)
     else:
         # Обработка других кнопок
         pass
@@ -296,6 +305,74 @@ def request_feedback(update: Update, context: CallbackContext):
     
     query.edit_message_text(text=text, reply_markup=reply_markup)
 
+# Функция для показа текущего материала курса
+def show_current_material(update: Update, context: CallbackContext, path_id):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    conn = get_db_connection()
+    
+    # Получаем информацию о цепочке
+    sequence = conn.execute("SELECT * FROM content_sequences WHERE sequence_id = ?", (path_id,)).fetchone()
+    
+    if not sequence:
+        conn.close()
+        query.edit_message_text("Выбранный курс не найден. Пожалуйста, выберите другой курс.",
+                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
+        return
+    
+    # Получаем текущий день пользователя в этой последовательности
+    user_sequence = conn.execute("""
+        SELECT * FROM user_sequences 
+        WHERE user_id = ? AND sequence_id = ? AND is_active = 1
+    """, (user_id, path_id)).fetchone()
+    
+    if not user_sequence or user_sequence['current_day'] == 0:
+        conn.close()
+        query.edit_message_text("У вас нет активного прогресса по этому курсу.",
+                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
+        return
+    
+    current_day = user_sequence['current_day']
+    
+    # Получаем текущий материал
+    current_content = conn.execute("""
+        SELECT c.* 
+        FROM sequence_items si
+        JOIN content c ON si.content_id = c.content_id
+        WHERE si.sequence_id = ? AND si.day_number = ?
+    """, (path_id, current_day)).fetchone()
+    
+    if not current_content:
+        conn.close()
+        query.edit_message_text("Материал не найден. Пожалуйста, обратитесь в поддержку.",
+                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
+        return
+    
+    # Формируем текст сообщения
+    message_text = f"🎓 Ваш текущий материал курса \"{sequence['title']}\" (день {current_day} из {sequence['days_count']}):\n\n"
+    message_text += f"📌 {current_content['title']}\n"
+    message_text += f"📝 {current_content['description']}\n"
+    
+    if current_content['link']:
+        message_text += f"🔗 {current_content['link']}\n"
+    
+    # Если это последний день курса, добавляем промокод
+    if current_day == sequence['days_count']:
+        message_text += "\n🎉 Поздравляем с завершением мини-курса! 🎉\n"
+        message_text += "Вы успешно прошли все этапы обучения.\n\n"
+        message_text += "🎁 Специально для вас мы подготовили ПРОМОКОД на скидку 20% на полный курс:\n"
+        message_text += "PROMO_" + sequence['title'].replace(" ", "_").upper() + "\n\n"
+        message_text += "Используйте его при оформлении нашего полного курса на сайте:\n"
+        message_text += "https://www.flatloops.ru/education\n\n"
+        message_text += "Промокод действителен в течение 7 дней. Не упустите возможность!"
+    
+    conn.close()
+    
+    # Отправляем сообщение с материалом и кнопкой возврата
+    query.edit_message_text(text=message_text, 
+                           reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="educational_paths")]]))
+
 # Новая функция для показа доступных образовательных цепочек
 def show_educational_paths(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -345,10 +422,34 @@ def show_educational_paths(update: Update, context: CallbackContext):
         if not active_paths:  # Если нет ни активных, ни доступных цепочек
             text += "В настоящее время нет доступных образовательных курсов.\n"
     
-    # Добавляем кнопки для выбора цепочки
+    # Добавляем кнопки для выбора цепочки - располагаем по 2 в ряд, если возможно
     keyboard = []
+    
+    # Добавляем кнопки для просмотра текущих материалов активных курсов
+    current_buttons = []
+    for path in active_paths:
+        current_buttons.append(InlineKeyboardButton(f"📖 Просмотреть: {path['title']}", 
+                                                  callback_data=f"view_current_{path['sequence_id']}"))
+    
+    # Группируем кнопки по 2 в ряд
+    for i in range(0, len(current_buttons), 2):
+        if i + 1 < len(current_buttons):
+            keyboard.append([current_buttons[i], current_buttons[i+1]])
+        else:
+            keyboard.append([current_buttons[i]])
+    
+    # Добавляем кнопки для выбора новых курсов
+    new_buttons = []
     for path in paths:
-        keyboard.append([InlineKeyboardButton(f"Начать: {path['title']}", callback_data=f"select_path_{path['sequence_id']}")])
+        new_buttons.append(InlineKeyboardButton(f"▶️ Начать: {path['title']}", 
+                                               callback_data=f"select_path_{path['sequence_id']}"))
+    
+    # Группируем кнопки по 2 в ряд
+    for i in range(0, len(new_buttons), 2):
+        if i + 1 < len(new_buttons):
+            keyboard.append([new_buttons[i], new_buttons[i+1]])
+        else:
+            keyboard.append([new_buttons[i]])
     
     keyboard.append([InlineKeyboardButton("Назад", callback_data="main_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -424,7 +525,13 @@ def subscribe_to_path(update: Update, context: CallbackContext, path_id):
     conn.close()
     
     # Отвечаем пользователю
-    query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Главное меню", callback_data="main_menu")]]))
+    keyboard = [
+        [InlineKeyboardButton("Перейти к курсам", callback_data="educational_paths")],
+        [InlineKeyboardButton("Главное меню", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    query.edit_message_text(text=message_text, reply_markup=reply_markup)
 
 # Словарь для отслеживания последних сообщений пользователей
 last_message_times = {}
