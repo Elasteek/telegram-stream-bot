@@ -1,64 +1,48 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
-<head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2299.77">
-  <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
-    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
-  </style>
-</head>
-<body>
-<p class="p1">{% extends 'base.html' %}</p>
-<p class="p2"><br></p>
-<p class="p1">{% block content %}</p>
-<p class="p1">&lt;div class="container mt-4"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="card shadow-sm"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="card-header bg-primary text-white"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;h5 class="m-0"&gt;{{ title }}&lt;/h5&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="card-body"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;form method="post" enctype="multipart/form-data"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="mb-3"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;label for="title" class="form-label"&gt;Название курса&lt;/label&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;input type="text" class="form-control" id="title" name="title"<span class="Apple-converted-space"> </span></p>
-<p class="p1"><span class="Apple-converted-space">                           </span>value="{{ course.title if course else '' }}" required&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;/div&gt;</p>
-<p class="p2"><span class="Apple-converted-space">                </span></p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="mb-3"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;label for="description" class="form-label"&gt;Описание курса&lt;/label&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;textarea class="form-control" id="description" name="description" rows="3"&gt;{{ course.description if course else '' }}&lt;/textarea&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;/div&gt;</p>
-<p class="p2"><span class="Apple-converted-space">                </span></p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="mb-3"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;label for="link" class="form-label"&gt;Ссылка на курс&lt;/label&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;input type="url" class="form-control" id="link" name="link"<span class="Apple-converted-space"> </span></p>
-<p class="p1"><span class="Apple-converted-space">                           </span>value="{{ course.link if course else '' }}" required&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;/div&gt;</p>
-<p class="p2"><span class="Apple-converted-space">                </span></p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="mb-3"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;label for="order_num" class="form-label"&gt;Порядковый номер (для сортировки)&lt;/label&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;input type="number" class="form-control" id="order_num" name="order_num"<span class="Apple-converted-space"> </span></p>
-<p class="p1"><span class="Apple-converted-space">                           </span>value="{{ course.order_num if course else 0 }}" min="0"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;/div&gt;</p>
-<p class="p2"><span class="Apple-converted-space">                </span></p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="mb-3 form-check"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;input type="checkbox" class="form-check-input" id="is_active" name="is_active"<span class="Apple-converted-space"> </span></p>
-<p class="p1"><span class="Apple-converted-space">                           </span>{{ 'checked' if not course or course.is_active == 1 else '' }}&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;label class="form-check-label" for="is_active"&gt;Активный курс&lt;/label&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;/div&gt;</p>
-<p class="p2"><span class="Apple-converted-space">                </span></p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;div class="d-flex justify-content-between"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;a href="{{ url_for('courses') }}" class="btn btn-secondary"&gt;Отмена&lt;/a&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;button type="submit" class="btn btn-primary"&gt;Сохранить&lt;/button&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;/form&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
-<p class="p1">&lt;/div&gt;</p>
-<p class="p1">{% endblock %}</p>
-</body>
-</html>
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="m-0">{{ title }}</h5>
+        </div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="title" class="form-label">Название курса</label>
+                    <input type="text" class="form-control" id="title" name="title" 
+                           value="{{ course.title if course else '' }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="description" class="form-label">Описание курса</label>
+                    <textarea class="form-control" id="description" name="description" rows="3">{{ course.description if course else '' }}</textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="link" class="form-label">Ссылка на курс</label>
+                    <input type="url" class="form-control" id="link" name="link" 
+                           value="{{ course.link if course else '' }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="order_num" class="form-label">Порядковый номер (для сортировки)</label>
+                    <input type="number" class="form-control" id="order_num" name="order_num" 
+                           value="{{ course.order_num if course else 0 }}" min="0">
+                </div>
+                
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="is_active" name="is_active" 
+                           {{ 'checked' if not course or course.is_active == 1 else '' }}>
+                    <label class="form-check-label" for="is_active">Активный курс</label>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('courses') }}" class="btn btn-secondary">Отмена</a>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

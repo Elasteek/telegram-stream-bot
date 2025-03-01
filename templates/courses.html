@@ -1,106 +1,90 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
-<head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2299.77">
-  <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
-    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
-  </style>
-</head>
-<body>
-<p class="p1">{% extends 'base.html' %}</p>
-<p class="p2"><br></p>
-<p class="p1">{% block content %}</p>
-<p class="p1">&lt;div class="container mt-4"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="card shadow-sm"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="card-header bg-primary text-white d-flex justify-content-between align-items-center"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;h5 class="m-0"&gt;Управление курсами&lt;/h5&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;a href="{{ url_for('add_course') }}" class="btn btn-light btn-sm"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;i class="fas fa-plus"&gt;&lt;/i&gt; Добавить курс</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;/a&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="card-body"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>{% if courses %}</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="table-responsive"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;table class="table table-hover"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;thead&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                        </span>&lt;tr&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;th&gt;#&lt;/th&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Название&lt;/th&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Описание&lt;/th&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Ссылка&lt;/th&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Порядок&lt;/th&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Статус&lt;/th&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;th&gt;Действия&lt;/th&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                        </span>&lt;/tr&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;/thead&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;tbody&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                        </span>{% for course in courses %}</p>
-<p class="p1"><span class="Apple-converted-space">                        </span>&lt;tr&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ course.course_id }}&lt;/td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ course.title }}&lt;/td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ course.description[:50] ~ '...' if course.description and course.description|length &gt; 50 else course.description }}&lt;/td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;a href="{{ course.link }}" target="_blank" class="text-truncate d-inline-block" style="max-width: 200px;"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                    </span>{{ course.link }}</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;/a&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;td&gt;{{ course.order_num }}&lt;/td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>{% if course.is_active == 1 %}</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;span class="badge bg-success"&gt;Активный&lt;/span&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>{% else %}</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;span class="badge bg-secondary"&gt;Скрыт&lt;/span&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>{% endif %}</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;div class="btn-group"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                    </span>&lt;a href="{{ url_for('edit_course', course_id=course.course_id) }}" class="btn btn-sm btn-outline-primary"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                        </span>&lt;i class="fas fa-edit"&gt;&lt;/i&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                    </span>&lt;/a&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                    </span>&lt;button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ course.course_id }}"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                        </span>&lt;i class="fas fa-trash"&gt;&lt;/i&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                    </span>&lt;/button&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;/div&gt;</p>
-<p class="p2"><span class="Apple-converted-space">                                </span></p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;!-- Модальное окно подтверждения удаления --&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;div class="modal fade" id="deleteModal{{ course.course_id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ course.course_id }}" aria-hidden="true"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                    </span>&lt;div class="modal-dialog"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                        </span>&lt;div class="modal-content"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                            </span>&lt;div class="modal-header"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                                </span>&lt;h5 class="modal-title" id="deleteModalLabel{{ course.course_id }}"&gt;Подтверждение удаления&lt;/h5&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                                </span>&lt;button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"&gt;&lt;/button&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                            </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                            </span>&lt;div class="modal-body"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                                </span>Вы уверены, что хотите удалить курс &lt;strong&gt;{{ course.title }}&lt;/strong&gt;?</p>
-<p class="p1"><span class="Apple-converted-space">                                            </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                            </span>&lt;div class="modal-footer"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                                </span>&lt;button type="button" class="btn btn-secondary" data-bs-dismiss="modal"&gt;Отмена&lt;/button&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                                </span>&lt;form action="{{ url_for('delete_course', course_id=course.course_id) }}" method="post" class="d-inline"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                                    </span>&lt;button type="submit" class="btn btn-danger"&gt;Удалить&lt;/button&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                                </span>&lt;/form&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                            </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                        </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                    </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                                </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                            </span>&lt;/td&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                        </span>&lt;/tr&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                        </span>{% endfor %}</p>
-<p class="p1"><span class="Apple-converted-space">                    </span>&lt;/tbody&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;/table&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>{% else %}</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="alert alert-info"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">                </span>&lt;i class="fas fa-info-circle"&gt;&lt;/i&gt; Курсы не найдены. &lt;a href="{{ url_for('add_course') }}"&gt;Добавить первый курс&lt;/a&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>{% endif %}</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
-<p class="p1">&lt;/div&gt;</p>
-<p class="p1">{% endblock %}</p>
-</body>
-</html>
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h5 class="m-0">Управление курсами</h5>
+            <a href="{{ url_for('add_course') }}" class="btn btn-light btn-sm">
+                <i class="fas fa-plus"></i> Добавить курс
+            </a>
+        </div>
+        <div class="card-body">
+            {% if courses %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Название</th>
+                            <th>Описание</th>
+                            <th>Ссылка</th>
+                            <th>Порядок</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for course in courses %}
+                        <tr>
+                            <td>{{ course.course_id }}</td>
+                            <td>{{ course.title }}</td>
+                            <td>{{ course.description[:50] ~ '...' if course.description and course.description|length > 50 else course.description }}</td>
+                            <td>
+                                <a href="{{ course.link }}" target="_blank" class="text-truncate d-inline-block" style="max-width: 200px;">
+                                    {{ course.link }}
+                                </a>
+                            </td>
+                            <td>{{ course.order_num }}</td>
+                            <td>
+                                {% if course.is_active == 1 %}
+                                <span class="badge bg-success">Активный</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Скрыт</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{{ url_for('edit_course', course_id=course.course_id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ course.course_id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                
+                                <!-- Модальное окно подтверждения удаления -->
+                                <div class="modal fade" id="deleteModal{{ course.course_id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ course.course_id }}" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="deleteModalLabel{{ course.course_id }}">Подтверждение удаления</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                Вы уверены, что хотите удалить курс <strong>{{ course.title }}</strong>?
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                                                <form action="{{ url_for('delete_course', course_id=course.course_id) }}" method="post" class="d-inline">
+                                                    <button type="submit" class="btn btn-danger">Удалить</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> Курсы не найдены. <a href="{{ url_for('add_course') }}">Добавить первый курс</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
