@@ -105,6 +105,19 @@ def start(update: Update, context: CallbackContext):
         
         return CONTACT
 
+def send_welcome_invite(context: CallbackContext):
+    """Отправляет приветственное сообщение с приглашением в канал через 2 минуты"""
+    job = context.job
+    user_id = job.context['user_id']
+    
+    try:
+        context.bot.send_message(
+            chat_id=user_id,
+            text="Присоединяйтесь к нашему закрытому каналу Flatloops School: @flatloops_school"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при отправке отложенного приглашения: {e}")
+
 def process_contact(update: Update, context: CallbackContext):
     user = update.effective_user
     contact = update.message.contact
@@ -139,6 +152,13 @@ def process_contact(update: Update, context: CallbackContext):
     
     # Показываем главное меню
     show_main_menu(update, context)
+    
+    # Планируем отправку приглашения через 2 минуты (120 секунд)
+    context.job_queue.run_once(
+        send_welcome_invite, 
+        120, 
+        context={'user_id': user.id}
+    )
     
     # Планируем уведомления для нового пользователя
     schedule_user_notifications(user.id)
