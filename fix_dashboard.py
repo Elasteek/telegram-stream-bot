@@ -1,4 +1,18 @@
-{% extends "base.html" %}
+import os
+
+def fix_dashboard_html():
+    print("Исправление шаблона dashboard.html...")
+    
+    dashboard_path = os.path.join('templates', 'dashboard.html')
+    
+    # Проверяем, существует ли файл
+    if not os.path.exists(dashboard_path):
+        print(f"ОШИБКА: Файл {dashboard_path} не найден!")
+        return False
+    
+    # Создаем простой и надежный шаблон dashboard
+    with open(dashboard_path, 'w') as f:
+        f.write('''{% extends "base.html" %}
 
 {% block title %}Дашборд{% endblock %}
 
@@ -129,3 +143,10 @@
     <a href="{{ url_for('logout') }}" class="btn btn-danger">Выйти</a>
 </div>
 {% endblock %}
+''')
+    
+    print("Шаблон dashboard.html успешно исправлен!")
+    return True
+
+if __name__ == "__main__":
+    fix_dashboard_html()
