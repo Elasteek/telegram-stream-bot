@@ -304,13 +304,82 @@ def show_useful_content(update: Update, context: CallbackContext):
 def show_courses(update: Update, context: CallbackContext):
     query = update.callback_query
     
+    conn = get_db_connection()
+    # Проверяем, существует ли таблица courses
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='courses'")
+    table_exists = cursor.fetchone() is not None
+    
+    if not table_exists:
+        # Создаем таблицу курсов, если она еще не существует
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS courses (
+            course_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            link TEXT NOT NULL,
+            order_num INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        conn.commit()
+        
+        # Добавляем начальные курсы в базу данных
+        default_courses = [
+            ("Для начинающих - Основы музыкального продюсирования", 
+             "Базовый курс для всех, кто хочет начать создавать электронную музыку", 
+             "https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya", 1),
+            ("Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами", 
+             "Для тех, кто хочет углубить свои знания и научиться работать с лейблами", 
+             "https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa", 2),
+            ("Продвинутый курс - Техника live выступлений: играй вживую свои треки", 
+             "Научитесь выступать вживую и представлять свою музыку публике", 
+             "https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij", 3)
+        ]
+        
+        cursor.executemany('''
+            INSERT INTO courses (title, description, link, order_num) 
+            VALUES (?, ?, ?, ?)
+        ''', default_courses)
+        conn.commit()
+    
+    # Получаем активные курсы из базы данных, отсортированные по order_num
+    courses = conn.execute('''
+        SELECT * FROM courses 
+        WHERE is_active = 1 
+        ORDER BY order_num
+    ''').fetchall()
+    conn.close()
+    
+    if not courses:
+        query.edit_message_text(
+            "В настоящее время курсы не доступны. Пожалуйста, проверьте позже.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="main_menu")]])
+        )
+        return
+    
     text = "💼 Наши курсы:\n\n"
-    text += "1️⃣ Для начинающих - Основы музыкального продюсирования\n"
-    text += "👉 https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya\n\n"
-    text += "2️⃣ Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами\n"
-    text += "👉 https://www.flatloops.ru/education/online-group/sozdanie-tehno-treka-ot-idei-do-masteringa\n\n"
-    text += "3️⃣ Продвинутый курс - Техника live выступлений: играй вживую свои треки\n"
-    text += "👉 https://www.flatloops.ru/education/online-group/tehnika-live-vystuplenij\n\n"
+    
+    for i, course in enumerate(courses, 1):
+        # Добавляем emoji в зависимости от номера курса
+        if i == 1:
+            emoji = "1️⃣"
+        elif i == 2:
+            emoji = "2️⃣"
+        elif i == 3:
+            emoji = "3️⃣"
+        elif i == 4:
+            emoji = "4️⃣"
+        elif i == 5:
+            emoji = "5️⃣"
+        else:
+            emoji = "🔹"
+        
+        text += f"{emoji} {course['title']}\n"
+        if course['description']:
+            text += f"{course['description']}\n"
+        text += f"👉 {course['link']}\n\n"
     
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1052,6 +1121,19 @@ def main():
         user_id INTEGER,
         stream_id INTEGER,
         feedback_text TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    # Создаем таблицу для курсов, если она не существует
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS courses (
+        course_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        link TEXT NOT NULL,
+        order_num INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
