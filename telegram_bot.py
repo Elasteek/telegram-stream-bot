@@ -141,10 +141,11 @@ def process_contact(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 def show_main_menu(update: Update, context: CallbackContext):
-    # Меняем порядок кнопок - сначала полезные материалы, затем всё остальное
+    # Меняем порядок кнопок и обновляем название кнопки для образовательных цепочек
     keyboard = [
         [InlineKeyboardButton("📚 Полезные материалы", callback_data="useful_content")],
-        [InlineKeyboardButton("🎓 Наши курсы", callback_data="our_courses")],
+        [InlineKeyboardButton("🎓 Бесплатные мини курсы", callback_data="educational_paths")],
+        [InlineKeyboardButton("💼 Наши курсы", callback_data="our_courses")],
         [InlineKeyboardButton("🎬 Ближайшие стримы", callback_data="upcoming_streams")],
         [InlineKeyboardButton("✍️ Напиши нам", callback_data="feedback")]
     ]
@@ -168,12 +169,18 @@ def button_handler(update: Update, context: CallbackContext):
         show_upcoming_streams(update, context)
     elif query.data == "useful_content":
         show_useful_content(update, context)
+    elif query.data == "educational_paths": 
+        show_educational_paths(update, context)
     elif query.data == "our_courses":
         show_courses(update, context)
     elif query.data == "feedback":
         request_feedback(update, context)
     elif query.data == "main_menu":
         show_main_menu(update, context)
+    elif query.data.startswith("select_path_"):
+        # Обработка выбора образовательной цепочки
+        path_id = int(query.data.split("_")[2])
+        subscribe_to_path(update, context, path_id)
     else:
         # Обработка других кнопок
         pass
@@ -225,9 +232,11 @@ def show_useful_content(update: Update, context: CallbackContext):
     query = update.callback_query
     
     conn = get_db_connection()
+    # Показываем только нескрытый контент
     content_items = conn.execute("""
-    SELECT content_id, content_type, title, description, link
+    SELECT content_id, content_type, title, description, link, image_url, file_url
     FROM content
+    WHERE is_hidden = 0 OR is_hidden IS NULL
     ORDER BY created_at DESC
     LIMIT 5
     """).fetchall()
@@ -247,6 +256,8 @@ def show_useful_content(update: Update, context: CallbackContext):
         text += f"📝 {item['description']}\n"
         if item['link']:
             text += f"🔗 {item['link']}\n"
+        if item['image_url'] or item['file_url']:
+            text += "📎 Доступны дополнительные материалы\n"
         text += "\n"
     
     keyboard = [[InlineKeyboardButton("Назад", callback_data="main_menu")]]
@@ -257,7 +268,7 @@ def show_useful_content(update: Update, context: CallbackContext):
 def show_courses(update: Update, context: CallbackContext):
     query = update.callback_query
     
-    text = "🎓 Наши курсы:\n\n"
+    text = "💼 Наши курсы:\n\n"
     text += "1️⃣ Для начинающих - Основы музыкального продюсирования\n"
     text += "👉 https://www.flatloops.ru/osnovy_muzykalnogo_prodyusirovaniya\n\n"
     text += "2️⃣ Продвинутый курс - Создание техно-трека: от идеи до работы с лейблами\n"
@@ -284,6 +295,136 @@ def request_feedback(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     query.edit_message_text(text=text, reply_markup=reply_markup)
+
+# Новая функция для показа доступных образовательных цепочек
+def show_educational_paths(update: Update, context: CallbackContext):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    conn = get_db_connection()
+    
+    # Получаем доступные образовательные цепочки
+    paths = conn.execute("""
+    SELECT cs.sequence_id, cs.title, cs.description, cs.days_count 
+    FROM content_sequences cs
+    WHERE cs.sequence_id NOT IN (
+        SELECT sequence_id FROM user_sequences WHERE user_id = ?
+    )
+    ORDER BY cs.created_at DESC
+    """, (user_id,)).fetchall()
+    
+    # Получаем активные подписки пользователя
+    active_paths = conn.execute("""
+    SELECT cs.sequence_id, cs.title, us.current_day, cs.days_count
+    FROM user_sequences us
+    JOIN content_sequences cs ON us.sequence_id = cs.sequence_id
+    WHERE us.user_id = ? AND us.is_active = 1
+    ORDER BY us.start_date DESC
+    """, (user_id,)).fetchall()
+    
+    conn.close()
+    
+    text = "🎓 Бесплатные мини курсы\n\n"
+    
+    # Показываем активные подписки
+    if active_paths:
+        text += "Ваши активные курсы:\n\n"
+        for path in active_paths:
+            progress = round((path['current_day'] / path['days_count']) * 100)
+            text += f"📝 {path['title']}\n"
+            text += f"📊 Прогресс: {path['current_day']}/{path['days_count']} ({progress}%)\n\n"
+    
+    # Показываем доступные цепочки
+    if paths:
+        text += "Доступные бесплатные курсы:\n\n"
+        for path in paths:
+            text += f"🔹 {path['title']}\n"
+            text += f"📝 {path['description']}\n"
+            text += f"⏱ Продолжительность: {path['days_count']} дней\n\n"
+    else:
+        if not active_paths:  # Если нет ни активных, ни доступных цепочек
+            text += "В настоящее время нет доступных образовательных курсов.\n"
+    
+    # Добавляем кнопки для выбора цепочки
+    keyboard = []
+    for path in paths:
+        keyboard.append([InlineKeyboardButton(f"Начать: {path['title']}", callback_data=f"select_path_{path['sequence_id']}")])
+    
+    keyboard.append([InlineKeyboardButton("Назад", callback_data="main_menu")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    query.edit_message_text(text=text, reply_markup=reply_markup)
+
+# Функция для подписки на образовательную цепочку
+def subscribe_to_path(update: Update, context: CallbackContext, path_id):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    conn = get_db_connection()
+    
+    # Проверяем, существует ли цепочка
+    path = conn.execute("SELECT * FROM content_sequences WHERE sequence_id = ?", (path_id,)).fetchone()
+    
+    if not path:
+        conn.close()
+        query.edit_message_text("Выбранный курс не найден. Пожалуйста, выберите другой курс.")
+        return
+    
+    # Проверяем, не подписан ли уже пользователь
+    existing = conn.execute("""
+        SELECT COUNT(*) FROM user_sequences 
+        WHERE user_id = ? AND sequence_id = ?
+    """, (user_id, path_id)).fetchone()[0]
+    
+    if existing > 0:
+        # Обновляем существующую подписку
+        conn.execute("""
+            UPDATE user_sequences
+            SET is_active = 1, current_day = 0, start_date = datetime('now')
+            WHERE user_id = ? AND sequence_id = ?
+        """, (user_id, path_id))
+    else:
+        # Создаем новую подписку
+        conn.execute("""
+            INSERT INTO user_sequences 
+            (user_id, sequence_id, current_day, start_date, is_active)
+            VALUES (?, ?, 0, datetime('now'), 1)
+        """, (user_id, path_id))
+    
+    conn.commit()
+    
+    # Получаем первый день контента
+    first_day_content = conn.execute("""
+    SELECT c.* 
+    FROM sequence_items si
+    JOIN content c ON si.content_id = c.content_id
+    WHERE si.sequence_id = ? AND si.day_number = 1
+    """, (path_id,)).fetchone()
+    
+    # Отправляем первый материал прямо сейчас
+    if first_day_content:
+        message_text = f"🎓 Ваш первый материал курса \"{path['title']}\":\n\n"
+        message_text += f"📌 {first_day_content['title']}\n"
+        message_text += f"📝 {first_day_content['description']}\n"
+        
+        if first_day_content['link']:
+            message_text += f"🔗 {first_day_content['link']}\n"
+        
+        # Обновляем прогресс пользователя
+        conn.execute("""
+        UPDATE user_sequences
+        SET current_day = 1
+        WHERE user_id = ? AND sequence_id = ?
+        """, (user_id, path_id))
+        conn.commit()
+    else:
+        message_text = f"🎓 Вы успешно подписались на курс \"{path['title']}\"!\n\n"
+        message_text += "Первый материал будет отправлен вам завтра."
+    
+    conn.close()
+    
+    # Отвечаем пользователю
+    query.edit_message_text(text=message_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Главное меню", callback_data="main_menu")]]))
 
 # Словарь для отслеживания последних сообщений пользователей
 last_message_times = {}
@@ -315,8 +456,7 @@ def process_message(update: Update, context: CallbackContext):
         # Добавляем текущее время в словарь последних сообщений
         last_message_times[user_id] = datetime.now()
         
-        # Показываем главное меню (без добавления кнопок после сообщения "Спасибо")
-        # Это одно из ключевых изменений - убираем дублирование меню
+        # Не показываем главное меню после фидбека - так выглядит чище
         return
     else:
         # Проверяем, когда пользователь последний раз получал уведомление
@@ -455,7 +595,7 @@ def schedule_user_notifications(user_id):
                 """, (user_id, content_id, 'sequence', next_notification_time.strftime('%Y-%m-%d %H:%M:%S')))
     
     # Планируем бонусные уведомления (контент)
-    content_count = conn.execute("SELECT COUNT(*) FROM content").fetchone()[0]
+    content_count = conn.execute("SELECT COUNT(*) FROM content WHERE is_hidden = 0 OR is_hidden IS NULL").fetchone()[0]
     
     if content_count > 0:
         # Определяем, сколько бонусных уведомлений планировать
@@ -487,7 +627,8 @@ def send_pending_notifications(bot):
     notifications = conn.execute("""
     SELECT n.notification_id, n.user_id, n.stream_id, n.content_id, n.notification_type,
            s.title as stream_title, s.description as stream_desc, s.stream_date, s.is_closed, s.access_link,
-           c.title as content_title, c.description as content_desc, c.link as content_link
+           c.title as content_title, c.description as content_desc, c.link as content_link, 
+           c.image_url, c.file_url
     FROM notifications n
     LEFT JOIN streams s ON n.stream_id = s.stream_id
     LEFT JOIN content c ON n.content_id = c.content_id
@@ -540,11 +681,21 @@ def send_pending_notifications(bot):
             """, (notification['content_id'],)).fetchone()
             
             if sequence_info:
-                message_text = f"📚 День {sequence_info['day_number']} из {sequence_info['days_count']}: {sequence_info['title']}\n\n"
+                message_text = f"🎓 День {sequence_info['day_number']} из {sequence_info['days_count']}: {sequence_info['title']}\n\n"
                 message_text += f"📌 {notification['content_title']}\n"
                 message_text += f"📝 {notification['content_desc']}\n"
                 if notification['content_link']:
                     message_text += f"🔗 {notification['content_link']}\n"
+                
+                # Если это последний день курса, добавляем промокод или предложение
+                if sequence_info['day_number'] == sequence_info['days_count']:
+                    message_text += "\n🎉 Поздравляем с завершением мини-курса! 🎉\n"
+                    message_text += "Вы успешно прошли все этапы обучения.\n\n"
+                    message_text += "🎁 Специально для вас мы подготовили ПРОМОКОД на скидку 20% на полный курс:\n"
+                    message_text += "PROMO_" + sequence_info['title'].replace(" ", "_").upper() + "\n\n"
+                    message_text += "Используйте его при оформлении нашего полного курса на сайте:\n"
+                    message_text += "https://www.flatloops.ru/education\n\n"
+                    message_text += "Промокод действителен в течение 7 дней. Не упустите возможность!"
                     
                 # Обновляем текущий день в последовательности для пользователя
                 conn.execute("""
@@ -562,10 +713,11 @@ def send_pending_notifications(bot):
                     message_text += f"🔗 {notification['content_link']}\n"
         
         elif notification_type == 'bonus':
-            # Получаем случайный контент
+            # Получаем случайный контент, исключая скрытый
             content = conn.execute("""
-            SELECT title, description, link
+            SELECT title, description, link, image_url, file_url
             FROM content
+            WHERE is_hidden = 0 OR is_hidden IS NULL
             ORDER BY RANDOM()
             LIMIT 1
             """).fetchone()
@@ -576,6 +728,8 @@ def send_pending_notifications(bot):
                 message_text += f"📝 {content['description']}\n"
                 if content['link']:
                     message_text += f"🔗 {content['link']}\n"
+                if content['image_url'] or content['file_url']:
+                    message_text += "📎 Доступны дополнительные материалы\n"
             else:
                 # Если контента нет, не отправляем уведомление
                 conn.execute("UPDATE notifications SET sent = 1 WHERE notification_id = ?", (notification_id,))
@@ -708,6 +862,7 @@ def main():
         link TEXT,
         image_url TEXT,
         file_url TEXT,
+        is_hidden INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
@@ -766,6 +921,11 @@ def main():
         feedback_text TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
+    ''')
+    
+    # Добавляем индекс для быстрого поиска контента по статусу скрытия, если его нет
+    cursor.execute('''
+    CREATE INDEX IF NOT EXISTS idx_content_is_hidden ON content (is_hidden)
     ''')
     
     conn.commit()

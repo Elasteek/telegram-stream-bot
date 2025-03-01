@@ -35,7 +35,7 @@
                     <small class="form-text text-muted">Укажите URL для перехода по ссылке</small>
                 </div>
                 
-                <!-- Добавляем новые поля для загрузки изображений и файлов -->
+                <!-- Добавляем поля для загрузки изображений и файлов -->
                 <div class="form-group">
                     <label for="image">Изображение (необязательно)</label>
                     <input type="file" class="form-control-file" id="image" name="image" accept="image/*">
@@ -56,6 +56,18 @@
                         </div>
                     {% endif %}
                     <small class="form-text text-muted">Поддерживаемые форматы: PDF, DOC(X), XLS(X), MP3, MP4, и другие.</small>
+                </div>
+                
+                <!-- Добавляем опцию скрытия из общего списка материалов -->
+                <div class="form-group">
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="is_hidden" name="is_hidden" value="1" 
+                               {% if content and content.is_hidden %}checked{% endif %}>
+                        <label class="custom-control-label" for="is_hidden">
+                            <strong>Скрыть из раздела "Полезные материалы"</strong>
+                        </label>
+                        <small class="form-text text-muted">Отметьте, если этот контент должен быть доступен только в образовательных цепочках</small>
+                    </div>
                 </div>
                 
                 <button type="submit" class="btn btn-primary">Сохранить</button>

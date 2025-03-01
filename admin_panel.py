@@ -52,7 +52,7 @@ def init_db():
     )
     ''')
     
-    # Создаем таблицу контента с добавлением полей для изображений и файлов
+    # Создаем таблицу контента с добавлением полей для изображений и файлов и поля is_hidden
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS content (
         content_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +62,7 @@ def init_db():
         link TEXT,
         image_url TEXT,
         file_url TEXT,
+        is_hidden INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
@@ -129,6 +130,11 @@ def init_db():
         sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (user_id)
     )
+    ''')
+    
+    # Создаем индекс для быстрого поиска контента по статусу скрытия
+    cursor.execute('''
+    CREATE INDEX IF NOT EXISTS idx_content_is_hidden ON content (is_hidden)
     ''')
     
     # Добавляем тестовых пользователей, если таблица пуста
@@ -372,6 +378,7 @@ def add_content():
         title = request.form['title']
         description = request.form['description']
         link = request.form['link']
+        is_hidden = 1 if 'is_hidden' in request.form else 0
         
         # Обработка загруженного изображения
         image_url = None
@@ -397,9 +404,9 @@ def add_content():
         
         conn = get_db_connection()
         conn.execute('''
-            INSERT INTO content (content_type, title, description, link, image_url, file_url) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (content_type, title, description, link, image_url, file_url))
+            INSERT INTO content (content_type, title, description, link, image_url, file_url, is_hidden) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (content_type, title, description, link, image_url, file_url, is_hidden))
         conn.commit()
         conn.close()
         
@@ -426,6 +433,7 @@ def edit_content(content_id):
         title = request.form['title']
         description = request.form['description']
         link = request.form['link']
+        is_hidden = 1 if 'is_hidden' in request.form else 0
         
         # Инициализируем значениями из БД
         image_url = content['image_url']
@@ -453,9 +461,10 @@ def edit_content(content_id):
         
         conn = get_db_connection()
         conn.execute('''
-            UPDATE content SET content_type = ?, title = ?, description = ?, link = ?, image_url = ?, file_url = ? 
+            UPDATE content SET content_type = ?, title = ?, description = ?, link = ?, 
+            image_url = ?, file_url = ?, is_hidden = ?
             WHERE content_id = ?
-        ''', (content_type, title, description, link, image_url, file_url, content_id))
+        ''', (content_type, title, description, link, image_url, file_url, is_hidden, content_id))
         conn.commit()
         conn.close()
         
@@ -607,6 +616,14 @@ def edit_sequence_items(sequence_id):
                     INSERT INTO sequence_items (sequence_id, content_id, day_number)
                     VALUES (?, ?, ?)
                 ''', (sequence_id, content_id, day_number))
+                
+                # Автоматически отмечаем контент как скрытый, если он используется в цепочке
+                conn.execute('''
+                    UPDATE content
+                    SET is_hidden = 1
+                    WHERE content_id = ?
+                ''', (content_id,))
+                
                 conn.commit()
                 flash('Элемент добавлен в цепочку!', 'success')
                 
@@ -734,7 +751,7 @@ def user_detail(user_id):
     ''', (user_id,)).fetchall()
     
     # Получаем историю сообщений в формате диалога
-    # ИЗМЕНЕНИЕ: Обратный порядок сообщений (старые внизу, новые вверху)
+    # ИЗМЕНЕНИЕ: Теперь сообщения отображаются в хронологическом порядке (старые внизу, новые вверху)
     message_history = conn.execute('''
         SELECT *
         FROM message_history
